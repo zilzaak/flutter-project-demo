@@ -18,7 +18,7 @@ class EmployeeApiService {
       final Uri uri = Uri.parse(
           '$baseUrl$employeeInfoEndpoint'
               '?employeeId=$employeeId'
-              '&date=$date'
+              '&date=$date&publicRsa=testrsa'
       );
 
       final response = await http.get(
