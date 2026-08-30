@@ -5,6 +5,7 @@ import '../app_global.dart';
 import '../models/employee_model.dart';
 import '../services/auth_service.dart';
 import '../services/location_service.dart';
+import 'location_graph_screen.dart';
 import 'login_screen.dart';
 
 class EmployeeDetailsScreen extends StatefulWidget {
@@ -285,6 +286,42 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Locationgraph Button (Fetches & Displays Today's Location Path Graph)
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 14),
+          child: ElevatedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const LocationGraphScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.auto_graph, color: Colors.white, size: 22),
+            label: const Text(
+              'Locationgraph',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+                color: Colors.white,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.indigo.shade700,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+              elevation: 3,
+              shadowColor: Colors.indigo.withOpacity(0.4),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [

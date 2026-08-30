@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import '../app_global.dart';
-import '../models/employee_model.dart';
 
 class LocationDataModel {
   final double latitude;

@@ -35,7 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final employee = await _authService.login(
+      await _authService.login(
         userId: userId,
         password: password,
       );
