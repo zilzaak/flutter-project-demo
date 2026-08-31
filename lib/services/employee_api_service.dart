@@ -1,11 +1,11 @@
 
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:my_demo_project/app_global.dart';
 import '../models/employee_model.dart';
 
 class EmployeeApiService {
-  //static const String baseUrl = 'http://localhost:7014';
-  static const String baseUrl = 'http://192.168.90.9:7014';
+  static const String baseUrl = AppGlobals.baseUrl;
   static const String employeeInfoEndpoint = '/api/ess/portal/employee-duty-monitoring/enroll-user';
 
   /// Fetch employee basic info from Spring Boot API

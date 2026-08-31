@@ -1,11 +1,10 @@
-// lib/globals.dart
 import 'package:flutter/foundation.dart';
-
 import 'models/employee_model.dart';
 
 /// Global variables - accessible from anywhere in the app
 class AppGlobals {
   // Singleton pattern
+  static const String baseUrl = 'http://192.168.90.9:7014';
   static final AppGlobals _instance = AppGlobals._internal();
   factory AppGlobals() => _instance;
   AppGlobals._internal();
@@ -40,7 +39,6 @@ class AppGlobals {
 
   // Get employee ID easily
   String? get employeeId => currentEmployee?.userId;
-
   // Check if token exists
   bool get hasToken => accessToken != null && accessToken!.isNotEmpty;
 }

@@ -1,4 +1,3 @@
-// lib/models/location_graph_model.dart
 import 'package:latlong2/latlong.dart';
 
 class LocationPointModel {
@@ -10,15 +9,19 @@ class LocationPointModel {
     required this.longitude,
   });
 
+
+
   factory LocationPointModel.fromJson(Map<String, dynamic> json) {
     return LocationPointModel(
       latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
       longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
     );
   }
-
   LatLng toLatLng() => LatLng(latitude, longitude);
 }
+
+
+
 
 class LocationGraphData {
   final double? officeLatitude;
@@ -30,6 +33,8 @@ class LocationGraphData {
     this.officeLongitude,
     required this.locationPoints,
   });
+
+
 
   factory LocationGraphData.fromJson(Map<String, dynamic> json) {
     final rawPoints = json['locationPoints'];
@@ -54,21 +59,17 @@ class LocationGraphData {
       officeLongitude != null &&
       (officeLatitude != 0.0 || officeLongitude != 0.0);
 
-  LatLng? get officeLatLng =>
-      hasOfficeLocation ? LatLng(officeLatitude!, officeLongitude!) : null;
+  LatLng? get officeLatLng => hasOfficeLocation ? LatLng(officeLatitude!, officeLongitude!) : null;
 
-  List<LatLng> get polylinePoints =>
-      locationPoints.map((p) => p.toLatLng()).toList();
+  List<LatLng> get polylinePoints => locationPoints.map((p) => p.toLatLng()).toList();
 
   int get totalPoints => locationPoints.length;
 
   bool get hasPoints => locationPoints.isNotEmpty;
 
-  LocationPointModel? get startPoint =>
-      locationPoints.isNotEmpty ? locationPoints.first : null;
+  LocationPointModel? get startPoint => locationPoints.isNotEmpty ? locationPoints.first : null;
 
-  LocationPointModel? get latestPoint =>
-      locationPoints.isNotEmpty ? locationPoints.last : null;
+  LocationPointModel? get latestPoint => locationPoints.isNotEmpty ? locationPoints.last : null;
 
   /// Calculate total path distance in Kilometers
   double get totalDistanceKm {
