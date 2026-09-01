@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import '../app_global.dart';
 import '../models/location_data_model.dart';
+import 'security_service.dart';
 
 class LocationService {
   static final LocationService _instance = LocationService._internal();
@@ -19,6 +20,8 @@ class LocationService {
   // Controllers
   Timer? _scheduledTimer;
   bool _isSyncing = false;
+
+
 
   /// Check location services and request necessary permissions
   Future<bool> handleLocationPermission() async {
@@ -36,14 +39,15 @@ class LocationService {
     return true;
   }
 
+
+
   /// Get current location
   Future<LocationDataModel> getCurrentLocation() async {
     await handleLocationPermission();
-
     Position position = await Geolocator.getCurrentPosition(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
-        timeLimit: Duration(seconds: 15),//This method will try maximum 15 second to retrieve location if fail than return , don't try after 15 second
+        timeLimit: Duration(seconds: 60), // Maximum 15 seconds to retrieve location
       ),
     );
 
@@ -70,8 +74,8 @@ class LocationService {
     stopScheduledSync();
     // Start new/next minutes timer
     _scheduledTimer = Timer.periodic(
-      Duration(minutes: syncIntervalMinutes),
-          (_) => _syncLocationToBackend(),
+      const Duration(minutes: syncIntervalMinutes),
+      (_) => _syncLocationToBackend(),
     );
     // Immediate first sync
     _syncLocationToBackend();
@@ -79,7 +83,6 @@ class LocationService {
       print('📍 Location sync started - every $syncIntervalMinutes minute(s)');
     }
   }
-
 
   /// Stop scheduled sync
   void stopScheduledSync() {
@@ -90,8 +93,7 @@ class LocationService {
     }
   }
 
-
-  /// Sync location to backend API
+  /// Sync location to backend API with RSA digital signature on payload
   Future<void> _syncLocationToBackend() async {
     if (_isSyncing) return;
 
@@ -120,24 +122,38 @@ class LocationService {
         'date': DateTime.now().toIso8601String(),
       };
 
+      final String jsonBody = jsonEncode(requestBody);
+
+      // Canonical payload matching backend Option 3 (employeeId|longitude|latitude)
+      final String canonicalPayload = '${employee.userId}|${location.longitude}|${location.latitude}';
+
+      // Sign canonical payload with stored RSA private key from Android KeyStore
+      final String? signature = await SecurityService().signPayload(canonicalPayload);
+
+      final Map<String, String> headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      };
+
+      if (signature != null && signature.isNotEmpty) {
+        headers['X-Signature'] = signature;
+        headers['X-Payload-Signature'] = signature;
+      }
+
       // Send to backend
       final response = await http.post(
         Uri.parse('$baseUrl$syncEndpoint'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode(requestBody),
+        headers: headers,
+        body: jsonBody,
       );
 
       if (kDebugMode) {
         if (response.statusCode >= 200 && response.statusCode < 300) {
-          print('✅ Location synced: ${location.latitude}, ${location.longitude}');
+          print('✅ Location synced with RSA signature: ${location.latitude}, ${location.longitude}');
         } else {
-          print('❌ Sync failed: ${response.statusCode}');
+          print('❌ Sync failed: ${response.statusCode} - ${response.body}');
         }
       }
-
     } catch (e) {
       if (kDebugMode) {
         print('❌ Location sync error: $e');
@@ -157,4 +173,3 @@ class LocationService {
     stopScheduledSync();
   }
 }
-
