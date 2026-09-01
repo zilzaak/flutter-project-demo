@@ -27,29 +27,57 @@ class LocationService {
   Future<bool> handleLocationPermission() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      throw Exception('Location services are disabled. Please enable GPS.');
+      throw Exception('Location services are disabled. Please turn on Location in phone settings.');
     }
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-        throw Exception('Location permissions are denied.');
+      if (permission == LocationPermission.denied) {
+        throw Exception('Location permission was denied. Please grant location access.');
       }
+    }
+    if (permission == LocationPermission.deniedForever) {
+      throw Exception('Location permission is permanently denied. Please allow it in App Settings.');
     }
     return true;
   }
 
-
-
-  /// Get current location
+  /// Get current location with fast fallback to avoid hanging indoors
   Future<LocationDataModel> getCurrentLocation() async {
     await handleLocationPermission();
-    Position position = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        timeLimit: Duration(seconds: 60), // Maximum 15 seconds to retrieve location
-      ),
-    );
+
+    Position? position;
+
+    // 1. Try fast GPS / Network position (8 seconds timeout)
+    try {
+      position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ Fast location timeout/error ($e), trying last known position...');
+      }
+    }
+
+    // 2. Fallback to last known position if current position timed out
+    if (position == null) {
+      try {
+        position = await Geolocator.getLastKnownPosition();
+      } catch (_) {}
+    }
+
+    // 3. Fallback to low accuracy if still null
+    if (position == null) {
+      position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.low,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+    }
 
     return LocationDataModel(
       latitude: position.latitude,
