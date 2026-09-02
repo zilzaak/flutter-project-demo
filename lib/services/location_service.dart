@@ -122,25 +122,38 @@ class LocationService {
   }
 
   /// Sync location to backend API with RSA digital signature on payload
-  Future<void> _syncLocationToBackend() async {
-    if (_isSyncing) return;
+  Future<void> _syncLocationToBackend({bool isManual = false}) async {
+    if (_isSyncing && !isManual) {
+      if (kDebugMode) {
+        print('⏳ Location sync already in progress, skipping periodic tick');
+      }
+      return;
+    }
 
     // Check globals for token and employee
     final token = globals.accessToken;
     final employee = globals.currentEmployee;
 
-    if (token == null || employee == null) {
+    if (token == null || employee == null || employee.userId.isEmpty) {
+      final msg = 'No authentication token or Employee ID found (ID: ${employee?.userId})';
       if (kDebugMode) {
-        print('❌ No token or employee data available');
+        print('❌ $msg');
       }
+      if (isManual) throw Exception(msg);
       return;
     }
 
     _isSyncing = true;
 
     try {
+      if (kDebugMode) {
+        print('📍 [LocationService] Fetching GPS coordinates for employee ${employee.userId}...');
+      }
       // Get current location
       final location = await getCurrentLocation();
+      if (kDebugMode) {
+        print('📍 [LocationService] Coordinates retrieved: Lat=${location.latitude}, Lng=${location.longitude}');
+      }
 
       // Prepare request body
       final requestBody = {
@@ -156,6 +169,9 @@ class LocationService {
       final String canonicalPayload = '${employee.userId}|${location.longitude}|${location.latitude}';
 
       // Sign canonical payload with stored RSA private key from Android KeyStore
+      if (kDebugMode) {
+        print('🔐 [LocationService] Signing canonical payload: "$canonicalPayload"');
+      }
       final String? signature = await SecurityService().signPayload(canonicalPayload);
 
       final Map<String, String> headers = {
@@ -168,23 +184,43 @@ class LocationService {
         headers['X-Payload-Signature'] = signature;
       }
 
+      final Uri syncUri = Uri.parse('$baseUrl$syncEndpoint');
+      if (kDebugMode) {
+        print('🌐 [LocationService] Sending POST $syncUri');
+        print('🌐 [LocationService] Headers: $headers');
+        print('🌐 [LocationService] Body: $jsonBody');
+      }
+
       // Send to backend
       final response = await http.post(
-        Uri.parse('$baseUrl$syncEndpoint'),
+        syncUri,
         headers: headers,
         body: jsonBody,
-      );
+      ).timeout(const Duration(seconds: 15));
 
       if (kDebugMode) {
-        if (response.statusCode >= 200 && response.statusCode < 300) {
-          print('✅ Location synced with RSA signature: ${location.latitude}, ${location.longitude}');
-        } else {
-          print('❌ Sync failed: ${response.statusCode} - ${response.body}');
+        print('📡 [LocationService] Status Code: ${response.statusCode}');
+        print('📡 [LocationService] Response: ${response.body}');
+      }
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['status'] == false) {
+          final String errMsg = jsonResponse['message'] ?? 'Location sync rejected by server';
+          throw Exception(errMsg);
         }
+        if (kDebugMode) {
+          print('✅ Location synced with RSA signature: ${location.latitude}, ${location.longitude}');
+        }
+      } else {
+        throw Exception('Server error ${response.statusCode}: ${response.body}');
       }
     } catch (e) {
       if (kDebugMode) {
         print('❌ Location sync error: $e');
+      }
+      if (isManual) {
+        rethrow;
       }
     } finally {
       _isSyncing = false;
@@ -193,7 +229,7 @@ class LocationService {
 
   /// Manual sync - call from UI
   Future<void> syncLocationNow() async {
-    await _syncLocationToBackend();
+    await _syncLocationToBackend(isManual: true);
   }
 
   /// Clean up

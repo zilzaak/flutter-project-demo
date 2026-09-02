@@ -164,7 +164,6 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
 
     try {
       await _locationService.syncLocationNow();
-      await _fetchLocation();
       // Also refresh the location graph immediately so new point is reflected
       await _fetchLocationGraph(isBackground: true);
       _showSnackBar('✅ Location synced & graph updated', Colors.green);

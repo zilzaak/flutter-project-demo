@@ -57,6 +57,7 @@ class EmployeeApiService {
             ? Map<String, dynamic>.from(data)
             : responseBody;
 
+        employeeData['employeeId'] = employeeData['employeeId'] ?? employeeData['employee_id'] ?? employeeId;
         employeeData['token'] = accessToken;
         return EmployeeModel.fromJson(employeeData);
       } else {
