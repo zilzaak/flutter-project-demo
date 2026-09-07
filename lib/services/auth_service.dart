@@ -1,185 +1,294 @@
-
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
+
 import '../app_global.dart';
 import '../models/employee_model.dart';
 import '../services/employee_api_service.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
+
   factory AuthService() => _instance;
+
   AuthService._internal();
 
   final FlutterAppAuth _appAuth = const FlutterAppAuth();
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Keycloak / SSO Configuration  (mirrors Angular environment.ts)
-  //   sso_url     : https://auth0.diu.edu.bd
-  //   sso_realm   : diu
-  //   sso_clientId: dm-app
-  // ─────────────────────────────────────────────────────────────────────────
+  // ============================================================
+  // KEYCLOAK CONFIGURATION
+  // ============================================================
 
-  static const String _ssoBaseUrl  = 'https://auth0.diu.edu.bd';
-  static const String _ssoRealm    = 'diu';          // ← realm is always 'diu'
-  static const String _ssoClientId = 'dm-app';       // ← new client ID registered by admin
+  static const String _keycloakBaseUrl =
+      'https://auth0.diu.edu.bd';
 
-  /// OIDC issuer — flutter_appauth uses this to auto-discover:
-  ///   auth endpoint    : /realms/diu/protocol/openid-connect/auth
-  ///   token endpoint   : /realms/diu/protocol/openid-connect/token
-  static const String _issuer = '$_ssoBaseUrl/realms/$_ssoRealm';
+  static const String _realm = 'diu';
 
-  /// ─── redirect_uri explanation ───────────────────────────────────────────
-  ///
-  /// The Angular web app uses  http://localhost:4200/dashboard  as redirect_uri
-  /// because the browser can navigate to that URL after login.
-  ///
-  /// A NATIVE Android app cannot open http://localhost:4200 — it needs an
-  /// Android custom-scheme URI that the OS can deliver back to the app.
-  ///
-  /// So our redirect_uri is:  com.example.mydemoproject://oauth2redirect
-  ///
-  /// What happens after login:
-  ///  1. User enters credentials on Keycloak's login page (Chrome Custom Tab).
-  ///  2. Keycloak's /login-actions/authenticate validates them.
-  ///  3. Keycloak redirects the tab to:
-  ///       com.example.mydemoproject://oauth2redirect?code=ABC&state=XYZ
-  ///  4. Android delivers that URI to RedirectUriReceiverActivity (AndroidManifest).
-  ///  5. flutter_appauth receives the `code`, then POSTs to the token endpoint:
-  ///       POST /realms/diu/protocol/openid-connect/token
-  ///         grant_type    = authorization_code
-  ///         code          = ABC
-  ///         code_verifier = <PKCE verifier generated at step 1>
-  ///         client_id     = dm-app
-  ///         redirect_uri  = com.example.mydemoproject://oauth2redirect
-  ///  6. Keycloak returns access_token, id_token, refresh_token.
-  ///  7. We extract preferred_username from id_token → employeeId.
-  ///  8. We call Spring Boot /api/ess/portal/employee-duty-monitoring/enroll-user
-  ///     with Bearer <access_token> → employee profile data.
-  ///  9. Flutter navigates to EmployeeDetailsScreen — this is the "dashboard"
-  ///     equivalent of the Angular app's /dashboard route.
-  ///
-  /// ⚠️  ACTION REQUIRED on Keycloak server:
-  ///     Clients → dm-app → Settings → Valid Redirect URIs
-  ///     Add:  com.example.mydemoproject://oauth2redirect
-  /// ────────────────────────────────────────────────────────────────────────
-  static const String _redirectUri = 'com.example.mydemoproject://oauth2redirect';
+  static const String _clientId = 'dm-app';
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SSO Login  (Authorization Code Grant + PKCE S256)
-  // ─────────────────────────────────────────────────────────────────────────
+  static const String _issuer =
+      '$_keycloakBaseUrl/realms/$_realm';
+
+  // IMPORTANT:
+  // This must EXACTLY match the redirect URI registered
+  // in Keycloak for client "dm-app".
+  static const String _redirectUri =
+      'com.example.mydemoproject://oauth2redirect';
+
+  static const List<String> _scopes = <String>[
+    'openid',
+    'profile',
+    'email',
+  ];
+
+  // ============================================================
+  // SSO LOGIN
+  //
+  // Authorization Code + PKCE
+  //
+  // flutter_appauth / native AppAuth handles:
+  //
+  //   1. state generation
+  //   2. PKCE code_verifier generation
+  //   3. PKCE S256 code_challenge generation
+  //   4. authorization request
+  //   5. redirect handling
+  //   6. authorization-code exchange
+  //   7. sending code_verifier to Keycloak
+  //
+  // ============================================================
 
   Future<EmployeeModel> loginWithSSO() async {
     try {
       if (kDebugMode) {
-        print('══════════════════════════════════════════════════');
-        print('🔑 SSO LOGIN STARTED');
-        print('   Issuer      : $_issuer');
-        print('   Client ID   : $_ssoClientId');
-        print('   Redirect URI: $_redirectUri');
-        print('   Scopes      : openid profile email');
-        print('══════════════════════════════════════════════════');
+        debugPrint('==============================================');
+        debugPrint('SSO LOGIN START');
+        debugPrint('Issuer       : $_issuer');
+        debugPrint('Client ID    : $_clientId');
+        debugPrint('Redirect URI : $_redirectUri');
+        debugPrint('Scopes       : ${_scopes.join(' ')}');
+        debugPrint('Grant        : Authorization Code + PKCE');
+        debugPrint('==============================================');
       }
 
-      // Steps 1–6: flutter_appauth opens Chrome Custom Tab, waits for redirect,
-      // then exchanges the code for tokens automatically.
-      final AuthorizationTokenResponse result =
-          await _appAuth.authorizeAndExchangeCode(
+      // ----------------------------------------------------------
+      // Authorization Code + PKCE
+      // ----------------------------------------------------------
+      //
+      // AppAuth automatically creates a cryptographically random
+      // code_verifier and derives the S256 code_challenge.
+      //
+      // It also uses state to protect the authorization response.
+      //
+      // DO NOT manually create the verifier/challenge here unless
+      // you have a specific reason to implement the complete OAuth
+      // transaction yourself.
+      //
+      final AuthorizationTokenResponse? response =
+      await _appAuth.authorizeAndExchangeCode(
         AuthorizationTokenRequest(
-          _ssoClientId,
+          _clientId,
           _redirectUri,
+
+          // OIDC discovery.
+          // AppAuth obtains:
+          //
+          // authorization_endpoint
+          // token_endpoint
+          // jwks_uri
+          // issuer
+          //
           issuer: _issuer,
-          scopes: ['openid', 'profile', 'email'],
-          // NOTE: Do NOT add 'response_mode: fragment' here.
-          // AppAuth always uses query mode for native apps.
-          // Fragment mode is only for browser-based implicit/hybrid flows.
+
+          scopes: _scopes,
+
+          // This is an OAuth authorization-code request.
+          //
+          // PKCE is handled by AppAuth.
         ),
       );
 
+      if (response == null) {
+        throw Exception('SSO login was cancelled.');
+      }
+
+      if (response.accessToken == null ||
+          response.accessToken!.isEmpty) {
+        throw Exception('Keycloak did not return an access token.');
+      }
+
+      final String accessToken = response.accessToken!;
+
       if (kDebugMode) {
-        print('✅ Token exchange successful');
-        print('   Access token length  : ${result.accessToken?.length ?? 0}');
-        print('   ID token present     : ${result.idToken != null}');
-        print('   Refresh token present: ${result.refreshToken != null}');
-        print('   Expires at           : ${result.accessTokenExpirationDateTime}');
+        debugPrint('==============================================');
+        debugPrint('TOKEN EXCHANGE SUCCESS');
+        debugPrint(
+          'Access token received : ${response.accessToken != null}',
+        );
+        debugPrint(
+          'ID token received     : ${response.idToken != null}',
+        );
+        debugPrint(
+          'Refresh token received: ${response.refreshToken != null}',
+        );
+        debugPrint(
+          'Expires at             : '
+              '${response.accessTokenExpirationDateTime}',
+        );
+        debugPrint('==============================================');
       }
 
-      final String accessToken = result.accessToken!;
+      // ----------------------------------------------------------
+      // Read employee ID from ID token
+      // ----------------------------------------------------------
 
-      // Step 7: Decode id_token to get preferred_username (= employeeId)
-      String employeeId = '';
-      try {
-        final Map<String, dynamic> claims =
-            _decodeJwtPayload(result.idToken ?? accessToken);
-        employeeId = claims['preferred_username']?.toString()
-            ?? claims['sub']?.toString()
-            ?? '';
-        if (kDebugMode) {
-          print('👤 Employee ID (preferred_username): $employeeId');
-          print('   Name : ${claims['name']}');
-          print('   Email: ${claims['email']}');
-        }
-      } catch (e) {
-        if (kDebugMode) print('⚠️  JWT decode error: $e');
+      final String? idToken = response.idToken;
+
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception('Keycloak did not return an ID token.');
       }
+
+      final Map<String, dynamic> claims =
+      _decodeJwtPayload(idToken);
+
+      final String employeeId =
+          claims['preferred_username']?.toString() ?? '';
 
       if (employeeId.isEmpty) {
-        throw Exception('Could not extract employee ID from SSO token.');
+        throw Exception(
+          'Employee ID was not found in preferred_username claim.',
+        );
       }
 
-      // Step 8: Enroll device RSA key + fetch employee profile from Spring Boot
       if (kDebugMode) {
-        print('🌐 Calling enroll-user API for employeeId: $employeeId');
+        debugPrint('Employee ID: $employeeId');
+        debugPrint('Name       : ${claims['name'] ?? ''}');
+        debugPrint('Email      : ${claims['email'] ?? ''}');
       }
 
-      final EmployeeModel employee = await EmployeeApiService.fetchEmployeeInfo(
+      // ----------------------------------------------------------
+      // Call Spring Boot
+      // ----------------------------------------------------------
+
+      final EmployeeModel employee =
+      await EmployeeApiService.fetchEmployeeInfo(
         employeeId: employeeId,
-        date: DateTime.now().toIso8601String().split('T').first,
+        date: DateTime.now()
+            .toIso8601String()
+            .split('T')
+            .first,
         accessToken: accessToken,
       );
 
-      // Step 9: Store token + employee globally; UI navigates to EmployeeDetailsScreen
-      globals.setAuthData(accessToken, employee);
+      // ----------------------------------------------------------
+      // Store authenticated session
+      // ----------------------------------------------------------
+
+      globals.setAuthData(
+        accessToken,
+        employee,
+      );
 
       if (kDebugMode) {
-        print('🎉 SSO LOGIN COMPLETE');
-        print('   Employee: ${employee.name} (${employee.userId})');
-        print('══════════════════════════════════════════════════');
+        debugPrint('==============================================');
+        debugPrint('SSO LOGIN COMPLETE');
+        debugPrint(
+          'Employee: ${employee.name} (${employee.userId})',
+        );
+        debugPrint('==============================================');
       }
 
       return employee;
+    } on FlutterAppAuthUserCancelledException {
+      throw Exception('SSO login was cancelled.');
+    } on FlutterAppAuthPlatformException catch (e) {
+      if (kDebugMode) {
+        debugPrint('AppAuth error: ${e.code}');
+        debugPrint('AppAuth message: ${e.message}');
+        debugPrint('AppAuth details: ${e.details}');
+      }
+
+      throw Exception(
+        'SSO authentication failed: ${e.message ?? e.code}',
+      );
     } catch (e) {
-      if (kDebugMode) print('❌ SSO Login failed: $e');
+      if (kDebugMode) {
+        debugPrint('SSO login failed: $e');
+      }
+
       rethrow;
     }
   }
 
-  /// Kept for backward compatibility — both buttons delegate to loginWithSSO.
-  Future<EmployeeModel> login({String? userId, String? password}) =>
-      loginWithSSO();
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Helpers
-  // ─────────────────────────────────────────────────────────────────────────
-
-  /// Decodes the payload section of a JWT.
-  /// (Signature verification happens server-side in Spring Boot via Keycloak keys.)
-  Map<String, dynamic> _decodeJwtPayload(String token) {
-    final parts = token.split('.');
-    if (parts.length != 3) {
-      throw FormatException('Invalid JWT: expected 3 dot-separated parts, got ${parts.length}');
-    }
-    final normalized = base64Url.normalize(parts[1]);
-    final decoded = utf8.decode(base64Url.decode(normalized));
-    return jsonDecode(decoded) as Map<String, dynamic>;
+  // ============================================================
+  // OLD LOGIN METHOD
+  // ============================================================
+  //
+  // Your current UI has a password button, but it actually calls
+  // SSO. Keep this only if you need backward compatibility.
+  //
+  Future<EmployeeModel> login({
+    String? userId,
+    String? password,
+  }) {
+    return loginWithSSO();
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Session management
-  // ─────────────────────────────────────────────────────────────────────────
+  // ============================================================
+  // JWT PAYLOAD DECODER
+  // ============================================================
+  //
+  // IMPORTANT:
+  // This ONLY decodes the JWT.
+  //
+  // It does NOT verify the JWT signature.
+  //
+  // Actual security validation must happen in Spring Boot.
+  //
+  Map<String, dynamic> _decodeJwtPayload(String token) {
+    final List<String> parts = token.split('.');
 
-  void           logout()             => globals.clearAuthData();
-  String?        getAccessToken()     => globals.accessToken;
-  EmployeeModel? getCurrentEmployee() => globals.currentEmployee;
-  bool           isLoggedIn()         => globals.isLoggedIn;
+    if (parts.length != 3) {
+      throw const FormatException(
+        'Invalid JWT: expected 3 parts.',
+      );
+    }
+
+    final String normalized =
+    base64Url.normalize(parts[1]);
+
+    final String payload =
+    utf8.decode(base64Url.decode(normalized));
+
+    final dynamic decoded = jsonDecode(payload);
+
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException(
+        'Invalid JWT payload.',
+      );
+    }
+
+    return decoded;
+  }
+
+  // ============================================================
+  // SESSION MANAGEMENT
+  // ============================================================
+
+  void logout() {
+    globals.clearAuthData();
+  }
+
+  String? getAccessToken() {
+    return globals.accessToken;
+  }
+
+  EmployeeModel? getCurrentEmployee() {
+    return globals.currentEmployee;
+  }
+
+  bool isLoggedIn() {
+    return globals.isLoggedIn;
+  }
 }
