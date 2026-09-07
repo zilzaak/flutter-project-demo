@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
@@ -27,25 +28,36 @@ public class EmployeeDutyMonitoringController {
     private final DutyMonitoringService employeeDutyMonitoringService;
 
     @Operation(summary = "Configure office location")
+    @PreAuthorize("hasRole('hr-portal')")
     @PostMapping("/geofance-config")
     public ResponseEntity<ApiDTO> geofanceConfig(
             @RequestBody GeofanceRequestDTO request,
             @AuthenticationPrincipal Jwt principal
     ) {
-        ApiDTO response = employeeDutyMonitoringService.geofanceConfig(request, "E", principal.getClaimAsString("preferred_username"));
+        ApiDTO response = employeeDutyMonitoringService.geofanceConfig(request , principal.getClaimAsString("preferred_username"));
         return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
 
-    @Operation(summary = "Update office location")
-    @PutMapping("/geofance-config")
-    public ResponseEntity<ApiDTO> geofanceConfigUpdate(
-            @RequestBody GeofanceRequestDTO request,
-            @AuthenticationPrincipal Jwt principal
+    @Operation(summary = "Employees geofance")
+    @PostMapping("/employees-geofance")
+    public ResponseEntity<ApiDTO> employeesGeofance(
+            @RequestParam Long facultyId,
+            @RequestParam Long departmentId,
+            @RequestParam String employeeIds
     ) {
-         ApiDTO response = employeeDutyMonitoringService.geofanceConfig(request, "U", principal.getClaimAsString("preferred_username"));
-         return new ResponseEntity<>(response, HttpStatus.OK);
-      }
+        ApiDTO response = employeeDutyMonitoringService.employeeGeofance(facultyId,departmentId,employeeIds);
+        return new ResponseEntity<>(response, HttpStatus.OK);
+    }
+
+
+    @Operation(summary = "Geofance List")
+    @GetMapping("/geofance-list")
+    public ResponseEntity<ApiDTO> getGeofanceList(
+    ) {
+        ApiDTO response = employeeDutyMonitoringService.getGeofanceList();
+        return new ResponseEntity<>(response, HttpStatus.OK);
+    }
 
 
     @Operation(summary = "Enroll user first time otherwise update by current shift")
@@ -87,6 +99,15 @@ public class EmployeeDutyMonitoringController {
     public ResponseEntity<ApiDTO> myLocationGraph(@AuthenticationPrincipal Jwt principal) {
         String preferredUsername = principal.getClaimAsString("preferred_username");
         ApiDTO response = employeeDutyMonitoringService.myLocationGraph(preferredUsername, LocalDate.now());
+        return new ResponseEntity<>(response, HttpStatus.OK);
+    }
+
+
+    @Operation(summary = "location graph for hr")
+    //@PreAuthorize("hasRole('hr-portal')")
+    @GetMapping("/location-graph")
+    public ResponseEntity<ApiDTO> LocationGraph(@RequestParam String employeeId,@RequestParam String date) {
+        ApiDTO response = employeeDutyMonitoringService.LocationGraph(employeeId, date);
         return new ResponseEntity<>(response, HttpStatus.OK);
     }
 }

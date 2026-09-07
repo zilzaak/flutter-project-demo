@@ -8,6 +8,7 @@ import bd.edu.diu.derpcore.entity.dutyMonitoring.UsersEnrollment;
 import bd.edu.diu.derpcore.repository.EmployeeAttendanceScheduleRepository;
 import bd.edu.diu.derpcore.repository.dutyMonitoring.EmployeeDistanceHistoryRepository;
 import bd.edu.diu.derpcore.repository.dutyMonitoring.EmployeeGeofanceRepository;
+import bd.edu.diu.derpcore.repository.dutyMonitoring.GeofanceRepository;
 import bd.edu.diu.derpcore.repository.dutyMonitoring.UsersEnrollmentRepository;
 import bd.edu.diu.derpcore.utility.CommonService;
 import bd.edu.diu.derpcore.utility.RsaSignatureUtil;
@@ -28,6 +29,7 @@ public class DutyMonitoringService {
 
     private final EmployeeAttendanceScheduleRepository employeeAttendanceScheduleRepository;
     private final EmployeeGeofanceRepository employeeGeofanceRepository;
+    private final GeofanceRepository geofanceRepository;
     private final UsersEnrollmentRepository usersEnrollmentRepository;
     private final EmployeeDistanceHistoryRepository employeeDistanceHistoryRepository;
     private final CommonService commonService;
@@ -42,23 +44,52 @@ public class DutyMonitoringService {
         return ApiDTO.builder().data(info).message((String) result.get("out_message_description")).status(true).build();
     }
 
-    public ApiDTO geofanceConfig(GeofanceRequestDTO request, String operation, String preferredUsername) {
-        try {
-            Map<String, Object> result = employeeGeofanceRepository.spEmployeeGeofanceSave(
-                    request.getGeofanceId(),
-                    request.getFacultyId(),
-                    request.getDepartmentId(),
-                    request.getEmployeeIds(),
-                    preferredUsername,
-                    operation);
-            if (result.get("out_message_code").equals(0)) {
-                return ApiDTO.builder().status(true).message((String) result.get("out_message_description")).build();
-            } else {
-                return ApiDTO.builder().status(false).message((String) result.get("out_message_description")).build();
+    public ApiDTO geofanceConfig(GeofanceRequestDTO request, String preferredUsername) {
+        Boolean createResponse=request.getNewEmployeeIds()==null?true:false;
+        Boolean updateResponse=request.getExistEmployeeIds()==null?true:false;
+        String createMessage=null;
+        String updateMessage=null;
+
+
+            try {
+                if(request.getNewEmployeeIds()!=null){
+                    Map<String, Object> result = employeeGeofanceRepository.spEmployeeGeofanceSave(
+                            request.getGeofanceId(),
+                            request.getFacultyId(),
+                            request.getDepartmentId(),
+                            request.getNewEmployeeIds(),
+                            preferredUsername,"E");
+                    if (result.get("out_message_code").equals(0)) {
+                        createResponse=true;
+                    } else {
+                        createResponse=false;
+                    }
+                    createMessage=result.get("out_message_description").toString();
+                }
+                if(request.getExistEmployeeIds()!=null){
+                    Map<String, Object> result = employeeGeofanceRepository.spEmployeeGeofanceSave(
+                            request.getGeofanceId(),
+                            request.getFacultyId(),
+                            request.getDepartmentId(),
+                            request.getNewEmployeeIds(),
+                            preferredUsername,"U");
+                    if (result.get("out_message_code").equals(0)) {
+                        updateResponse=true;
+                    } else {
+                        updateResponse=false;
+                    }
+                    updateMessage=result.get("out_message_description").toString();
+                }
+
+                if(!createResponse && !updateResponse){
+                    return ApiDTO.builder().status(false).message(createMessage+','+updateMessage).build();
+                }
+                return ApiDTO.builder().status(false).message(createMessage+','+updateMessage).build();
+            } catch (Exception e) {
+                return ApiDTO.builder().status(false).message(e.getMessage()).build();
             }
-        } catch (Exception e) {
-            return ApiDTO.builder().status(false).message(e.getMessage()).build();
-        }
+
+
     }
 
 
@@ -134,6 +165,43 @@ public class DutyMonitoringService {
             response.put("officeLongitude", employeeGeofance.getGeofance().getLongitude());
             response.put("locationPoints", locationPoints);
             return ApiDTO.builder().data(response).status(true).build();
+        } catch (Exception e) {
+            return ApiDTO.builder().status(false).message(e.getMessage()).build();
+        }
+    }
+
+
+    public ApiDTO LocationGraph(String employeeId, String dateString) {
+        try {
+            List<Map<String, Double>> locationPoints = employeeDistanceHistoryRepository.myLocationGraph(employeeId, LocalDate.parse(dateString));
+            EmployeeGeofance employeeGeofance = employeeGeofanceRepository.findByEmployeeId(employeeId);
+            Map<String, Object> response = new HashMap<>();
+            response.put("officeLatitude", employeeGeofance.getGeofance().getLatitude());
+            response.put("officeLongitude", employeeGeofance.getGeofance().getLongitude());
+            response.put("locationPoints", locationPoints);
+            return ApiDTO.builder().data(response).status(true).build();
+        } catch (Exception e) {
+            return ApiDTO.builder().status(false).message(e.getMessage()).build();
+        }
+    }
+
+
+    public ApiDTO getGeofanceList() {
+        try {
+            List<Map<String, Object>> geofanceList = geofanceRepository.geofanceList();
+            return ApiDTO.builder().data(geofanceList).status(true).build();
+        } catch (Exception e) {
+            return ApiDTO.builder().status(false).message(e.getMessage()).build();
+        }
+    }
+
+    public ApiDTO employeeGeofance(Long facultyId,Long departmentId,String employeeIds) {
+        if(employeeIds!=null && employeeIds.trim().isEmpty()){
+            employeeIds=null;
+        }
+        try {
+            List<Map<String, Object>> geofanceList = employeeGeofanceRepository.employeeGeofanc(facultyId,departmentId,employeeIds);
+            return ApiDTO.builder().data(geofanceList).status(true).build();
         } catch (Exception e) {
             return ApiDTO.builder().status(false).message(e.getMessage()).build();
         }

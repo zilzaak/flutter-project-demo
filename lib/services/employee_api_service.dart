@@ -53,9 +53,7 @@ class EmployeeApiService {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final Map<String, dynamic> responseBody = jsonDecode(response.body);
         final dynamic data = responseBody['data'];
-        final Map<String, dynamic> employeeData = (data is Map<String, dynamic>)
-            ? Map<String, dynamic>.from(data)
-            : responseBody;
+        final Map<String, dynamic> employeeData = (data is Map<String, dynamic>) ? Map<String, dynamic>.from(data) : responseBody;
 
         employeeData['employeeId'] = employeeData['employeeId'] ?? employeeData['employee_id'] ?? employeeId;
         employeeData['token'] = accessToken;
