@@ -2,13 +2,27 @@ import 'package:flutter/foundation.dart';
 import 'models/employee_model.dart';
 
 /// Global variables - accessible from anywhere in the app
-class AppGlobals {
-  // Singleton pattern
-  static const String baseUrl = 'https://api.diu.edu.bd';
-      //'http://192.168.90.9:7014';
-  static final AppGlobals _instance = AppGlobals._internal();
-  factory AppGlobals() => _instance;
-  AppGlobals._internal();
+class GlobalConfig {
+  //live configuration
+/*  static const String baseUrl = 'https://api.diu.edu.bd';
+  static const String _keycloakBaseUrl = 'https://auth0.diu.edu.bd';
+  static const String _realm = 'diu';
+  static const String _clientId = 'dm-app';
+  static const String _issuer = '$_keycloakBaseUrl/realms/$_realm';
+  static const String _redirectUri = 'com.example.mydemoproject://oauth2redirect';
+  */
+
+  //local configuration
+  static const String baseUrl = 'http://192.168.90.9:7014';
+  static const String keycloakBaseUrl = 'https://auth0.diu.edu.bd';
+  static const String realm = 'demo';
+  static const String clientId = 'ess-portal-ui';
+  static const String issuer = '$keycloakBaseUrl/realms/$realm';
+  static const String redirectUri = 'com.example.mydemoproject://oauth2redirect';
+
+  static final GlobalConfig _instance = GlobalConfig._internal();
+  factory GlobalConfig() => _instance;
+  GlobalConfig._internal();
 
   // Global variables
   String? accessToken;          // JWT token
@@ -45,4 +59,4 @@ class AppGlobals {
 }
 
 // Create a single instance to use everywhere
-final globals = AppGlobals();
+final globals = GlobalConfig();

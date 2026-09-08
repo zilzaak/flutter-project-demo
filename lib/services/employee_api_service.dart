@@ -2,12 +2,12 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import '../app_global.dart';
+import '../global_config.dart';
 import '../models/employee_model.dart';
 import 'security_service.dart';
 
 class EmployeeApiService {
-  static const String baseUrl = AppGlobals.baseUrl;
+  static const String baseUrl = GlobalConfig.baseUrl;
   static const String employeeInfoEndpoint = '/api/ess/portal/employee-duty-monitoring/enroll-user';
 
   /// Fetch employee basic info from Spring Boot API and enroll device with RSA Key Pair
@@ -28,9 +28,7 @@ class EmployeeApiService {
       // Step 2: Call enroll-user API with the persistent public RSA key
       final Uri uri = Uri.parse(
         '$baseUrl$employeeInfoEndpoint'
-        '?employeeId=${Uri.encodeComponent(employeeId)}'
-        '&date=${Uri.encodeComponent(date)}'
-        '&publicRsa=${Uri.encodeComponent(publicRsa)}',
+        '?publicRsa=${Uri.encodeComponent(publicRsa)}',
       );
 
       if (kDebugMode) {

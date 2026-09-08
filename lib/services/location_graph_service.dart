@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import '../app_global.dart';
+import '../global_config.dart';
 import '../models/location_graph_model.dart';
 
 class LocationGraphService {
@@ -14,7 +14,7 @@ class LocationGraphService {
     if (authToken == null || authToken.isEmpty) {
       throw Exception('User is not authenticated. Access token is missing.');
     }
-    final Uri uri = Uri.parse('${AppGlobals.baseUrl}$endpoint');
+    final Uri uri = Uri.parse('${GlobalConfig.baseUrl}$endpoint');
     if (kDebugMode) {
       print('🌐 Calling Location Graph API: $uri');
     }

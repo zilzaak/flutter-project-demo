@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
-import '../app_global.dart';
+import '../global_config.dart';
 import '../models/location_data_model.dart';
 import 'security_service.dart';
 
@@ -13,7 +13,7 @@ class LocationService {
   LocationService._internal();
 
   // Constants
-  static const String baseUrl = AppGlobals.baseUrl;
+  static const String baseUrl = GlobalConfig.baseUrl;
   static const String syncEndpoint = '/api/ess/portal/employee-duty-monitoring/sync-employee-location';
   static const int syncIntervalMinutes = 1;
 
@@ -73,8 +73,7 @@ class LocationService {
     if (position == null) {
       position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.low,
-          timeLimit: Duration(seconds: 10),
+          accuracy: LocationAccuracy.low, timeLimit: Duration(seconds: 10),
         ),
       );
     }
@@ -98,8 +97,6 @@ class LocationService {
       }
       return;
     }
-    // Cancel old timer
-    stopScheduledSync();
     // Start new/next minutes timer
     _scheduledTimer = Timer.periodic(
       const Duration(minutes: syncIntervalMinutes),
@@ -109,15 +106,6 @@ class LocationService {
     _syncLocationToBackend();
     if (kDebugMode) {
       print('📍 Location sync started - every $syncIntervalMinutes minute(s)');
-    }
-  }
-
-  /// Stop scheduled sync
-  void stopScheduledSync() {
-    _scheduledTimer?.cancel();
-    _scheduledTimer = null;
-    if (kDebugMode) {
-      print('📍 Location sync stopped');
     }
   }
 
@@ -232,8 +220,4 @@ class LocationService {
     await _syncLocationToBackend(isManual: true);
   }
 
-  /// Clean up
-  void dispose() {
-    stopScheduledSync();
-  }
 }

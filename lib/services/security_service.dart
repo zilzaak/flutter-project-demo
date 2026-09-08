@@ -116,7 +116,7 @@ class SecurityService {
     final hasPrivate = await hasStoredPrivateKey();
     if (existingPublic != null && existingPublic.isNotEmpty && hasPrivate) {
       if (kDebugMode) {
-        print('🔑 Reusing existing RSA KeyPair from KeyStore: ${existingPublic.substring(0, 30)}...');
+       // print('🔑 Reusing existing RSA KeyPair from KeyStore: ${existingPublic.substring(0, 30)}...');
       }
       return existingPublic;
     }

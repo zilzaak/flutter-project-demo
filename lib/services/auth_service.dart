@@ -3,44 +3,17 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 
-import '../app_global.dart';
+import '../global_config.dart';
 import '../models/employee_model.dart';
 import '../services/employee_api_service.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
-
   factory AuthService() => _instance;
-
   AuthService._internal();
-
   final FlutterAppAuth _appAuth = const FlutterAppAuth();
 
-  // ============================================================
-  // KEYCLOAK CONFIGURATION
-  // ============================================================
-
-  static const String _keycloakBaseUrl =
-      'https://auth0.diu.edu.bd';
-
-  static const String _realm = 'diu';
-
-  static const String _clientId = 'dm-app';
-
-  static const String _issuer =
-      '$_keycloakBaseUrl/realms/$_realm';
-
-  // IMPORTANT:
-  // This must EXACTLY match the redirect URI registered
-  // in Keycloak for client "dm-app".
-  static const String _redirectUri =
-      'com.example.mydemoproject://oauth2redirect';
-
-  static const List<String> _scopes = <String>[
-    'openid',
-    'profile',
-    'email',
-  ];
+  static const List<String> _scopes = <String>['openid', 'profile', 'email',];
 
   // ============================================================
   // SSO LOGIN
@@ -64,9 +37,9 @@ class AuthService {
       if (kDebugMode) {
         debugPrint('==============================================');
         debugPrint('SSO LOGIN START');
-        debugPrint('Issuer       : $_issuer');
-        debugPrint('Client ID    : $_clientId');
-        debugPrint('Redirect URI : $_redirectUri');
+        debugPrint('Issuer       : ${GlobalConfig.issuer}');
+        debugPrint('Client ID    : ${GlobalConfig.clientId}');
+        debugPrint('Redirect URI : ${GlobalConfig.redirectUri}');
         debugPrint('Scopes       : ${_scopes.join(' ')}');
         debugPrint('Grant        : Authorization Code + PKCE');
         debugPrint('==============================================');
@@ -88,8 +61,8 @@ class AuthService {
       final AuthorizationTokenResponse? response =
       await _appAuth.authorizeAndExchangeCode(
         AuthorizationTokenRequest(
-          _clientId,
-          _redirectUri,
+          GlobalConfig.clientId,
+          GlobalConfig.redirectUri,
 
           // OIDC discovery.
           // AppAuth obtains:
@@ -99,7 +72,7 @@ class AuthService {
           // jwks_uri
           // issuer
           //
-          issuer: _issuer,
+          issuer: GlobalConfig.issuer,
 
           scopes: _scopes,
 

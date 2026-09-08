@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import '../app_global.dart';
+import '../global_config.dart';
 import '../models/employee_model.dart';
 import '../models/location_data_model.dart';
 import '../models/location_graph_model.dart';
@@ -47,8 +47,6 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
   @override
   void dispose() {
     _graphRefreshTimer?.cancel();
-    _locationService.stopScheduledSync();
-    _locationService.dispose();
     _mapController.dispose();
     super.dispose();
   }
@@ -187,16 +185,13 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
       _locationService.startScheduledSync();
       _showSnackBar('📍 Tracking resumed', Colors.blue);
     } else {
-      _locationService.stopScheduledSync();
       _showSnackBar('⏹️ Tracking paused', Colors.orange);
     }
   }
 
   void _handleLogout() {
     _graphRefreshTimer?.cancel();
-    _locationService.stopScheduledSync();
     _authService.logout();
-
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -506,7 +501,7 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
                   size: 16,
                 ),
                 const SizedBox(width: 8),
-                TextButton.icon(
+/*                TextButton.icon(
                   onPressed: _toggleTracking,
                   icon: Icon(
                     _isTracking ? Icons.pause : Icons.play_arrow,
@@ -520,7 +515,7 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
+                ),*/
               ],
             ),
           ],

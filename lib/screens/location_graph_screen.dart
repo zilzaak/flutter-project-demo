@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import '../app_global.dart';
+import '../global_config.dart';
 import '../models/location_graph_model.dart';
 import '../services/location_graph_service.dart';
 
