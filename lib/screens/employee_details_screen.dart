@@ -552,7 +552,7 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
                           ),
                           Text(
                             _currentLocation != null
-                                ? 'Last sync: ${_currentLocation!.timestamp.toLocal().toString().substring(0, 19)}'
+                                ? 'Last sync: ${_currentLocation!.timestamp?.toLocal().toString().substring(0, 19)}'
                                 : 'Waiting for location...',
                             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                           ),
@@ -619,7 +619,7 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'Accuracy: ~${_currentLocation!.accuracy.toStringAsFixed(1)}m | Auto-sync every 1 min',
+                          'Accuracy: ~${_currentLocation!.accuracy?.toStringAsFixed(1)}m | Auto-sync every 1 min',
                           style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                         ),
                       ),

@@ -122,8 +122,7 @@ class AuthService {
         throw Exception('Keycloak did not return an ID token.');
       }
 
-      final Map<String, dynamic> claims =
-      _decodeJwtPayload(idToken);
+      final Map<String, dynamic> claims = _decodeJwtPayload(idToken);
 
       final String employeeId =
           claims['preferred_username']?.toString() ?? '';
@@ -158,10 +157,7 @@ class AuthService {
       // Store authenticated session
       // ----------------------------------------------------------
 
-      globals.setAuthData(
-        accessToken,
-        employee,
-      );
+      globals.setAuthData(accessToken, employee,);
 
       if (kDebugMode) {
         debugPrint('==============================================');
@@ -228,11 +224,9 @@ class AuthService {
       );
     }
 
-    final String normalized =
-    base64Url.normalize(parts[1]);
+    final String normalized = base64Url.normalize(parts[1]);
 
-    final String payload =
-    utf8.decode(base64Url.decode(normalized));
+    final String payload = utf8.decode(base64Url.decode(normalized));
 
     final dynamic decoded = jsonDecode(payload);
 

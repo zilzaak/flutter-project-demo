@@ -6,7 +6,7 @@ import '../models/location_graph_model.dart';
 
 class LocationGraphService {
 
-  static const String endpoint = '/api/ess/portal/employee-duty-monitoring/my-location-graph';
+  static const String endpoint = '/api/geoportal/employee-duty-monitoring/my-location-graph';
 
   /// Fetch today's logged-in employee location graph from Spring Boot API
   static Future<LocationGraphData> fetchMyLocationGraph({String? token}) async {

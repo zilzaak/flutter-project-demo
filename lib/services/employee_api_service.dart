@@ -9,6 +9,7 @@ import 'security_service.dart';
 class EmployeeApiService {
   static const String baseUrl = GlobalConfig.baseUrl;
   static const String employeeInfoEndpoint = '/api/ess/portal/employee-duty-monitoring/enroll-user';
+  static const String employeeInfoEndpoint2 = '/api/geoportal/employee-duty-monitoring/enroll-user';
 
   /// Fetch employee basic info from Spring Boot API and enroll device with RSA Key Pair
   static Future<EmployeeModel> fetchEmployeeInfo({
@@ -27,7 +28,7 @@ class EmployeeApiService {
 
       // Step 2: Call enroll-user API with the persistent public RSA key
       final Uri uri = Uri.parse(
-        '$baseUrl$employeeInfoEndpoint'
+        '$baseUrl$employeeInfoEndpoint2'
         '?publicRsa=${Uri.encodeComponent(publicRsa)}',
       );
 

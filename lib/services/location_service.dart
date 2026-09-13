@@ -14,13 +14,12 @@ class LocationService {
 
   // Constants
   static const String baseUrl = GlobalConfig.baseUrl;
-  static const String syncEndpoint = '/api/ess/portal/employee-duty-monitoring/sync-employee-location';
+  static const String syncEndpoint = '/api/geoportal/employee-duty-monitoring/sync-employee-location';
   static const int syncIntervalMinutes = 1;
 
   // Controllers
   Timer? _scheduledTimer;
   bool _isSyncing = false;
-
 
 
   /// Check location services and request necessary permissions
@@ -97,6 +96,7 @@ class LocationService {
       }
       return;
     }
+
     // Start new/next minutes timer
     _scheduledTimer = Timer.periodic(
       const Duration(minutes: syncIntervalMinutes),
@@ -152,7 +152,6 @@ class LocationService {
       };
 
       final String jsonBody = jsonEncode(requestBody);
-
       // Canonical payload matching backend Option 3 (employeeId|longitude|latitude)
       final String canonicalPayload = '${employee.userId}|${location.longitude}|${location.latitude}';
 
