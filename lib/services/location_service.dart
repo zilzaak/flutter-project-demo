@@ -3,23 +3,19 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:my_demo_project/utility/CommonUtil.dart';
 import '../global_config.dart';
+import '../models/employee_model.dart';
 import '../models/location_data_model.dart';
 import 'security_service.dart';
 
 class LocationService {
-  static final LocationService _instance = LocationService._internal();
-  factory LocationService() => _instance;
-  LocationService._internal();
-
-  // Constants
   static const String baseUrl = GlobalConfig.baseUrl;
-  static const String syncEndpoint = '/api/geoportal/employee-duty-monitoring/sync-employee-location';
+  static const String syncEndpoint = '/api/geoportal/geo-location/sync-employee-location';
   static const int syncIntervalMinutes = 1;
-
+  LocationDataModel? currentLocation;
   // Controllers
   Timer? _scheduledTimer;
-  bool _isSyncing = false;
 
 
   /// Check location services and request necessary permissions
@@ -41,41 +37,59 @@ class LocationService {
     return true;
   }
 
-  /// Get current location with fast fallback to avoid hanging indoors
+
+
+
   Future<LocationDataModel> getCurrentLocation() async {
     await handleLocationPermission();
-
     Position? position;
-
-    // 1. Try fast GPS / Network position (8 seconds timeout)
     try {
       position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.medium,
-          timeLimit: Duration(seconds: 8),
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 6),
         ),
       );
     } catch (e) {
       if (kDebugMode) {
-        print('⚠️ Fast location timeout/error ($e), trying last known position...');
+        print('⚠️ Fast GPS timeout/error ($e), trying last known position...');
       }
     }
 
-    // 2. Fallback to last known position if current position timed out
     if (position == null) {
       try {
         position = await Geolocator.getLastKnownPosition();
       } catch (_) {}
     }
 
-    // 3. Fallback to low accuracy if still null
     if (position == null) {
-      position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.low, timeLimit: Duration(seconds: 10),
-        ),
-      );
+      try {
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 6),
+          ),
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          print('⚠️ Low accuracy GPS timeout ($e), trying last known position again...');
+        }
+      }
     }
+
+    // 4. Final attempt: last known position
+    if (position == null) {
+      try {
+        position = await Geolocator.getLastKnownPosition();
+      } catch (_) {}
+    }
+    if (position == null) {
+      throw Exception('Unable to acquire GPS coordinates. Please ensure GPS is enabled and device has satellite/network connectivity.');
+    }
+
+    this.currentLocation=LocationDataModel(
+      latitude: position.latitude,
+      longitude: position.longitude,
+      accuracy: position.accuracy,
+      timestamp: position.timestamp,
+      statusMessage: 'Location fetched successfully',
+    );
 
     return LocationDataModel(
       latitude: position.latitude,
@@ -86,91 +100,74 @@ class LocationService {
     );
   }
 
-
-  /// Start scheduled location sync every 1 minute
-  void startScheduledSync() {
-    // Check if employee exists in globals
-    if (globals.currentEmployee == null) {
-      if (kDebugMode) {
-        print('❌ No employee data in globals');
-      }
-      return;
-    }
-
-    // Start new/next minutes timer
-    _scheduledTimer = Timer.periodic(
-      const Duration(minutes: syncIntervalMinutes),
-      (_) => _syncLocationToBackend(),
-    );
-    // Immediate first sync
-    _syncLocationToBackend();
+  /// Stop scheduled location sync
+  void stopScheduledSync() {
+    _scheduledTimer?.cancel();
+    _scheduledTimer = null;
     if (kDebugMode) {
-      print('📍 Location sync started - every $syncIntervalMinutes minute(s)');
+      print('⏹️ Scheduled location sync stopped');
     }
   }
 
+  /// Start scheduled location sync every 1 minute
+  void startScheduledSync(EmployeeModel? employee) {
+    // 1. Cancel previous timer so starting a new timer never leaves duplicates
+    _scheduledTimer?.cancel();
+    _scheduledTimer = null;
+    if (employee != null && commonUtil.isOfficeHourFinished(employee)) {
+      stopScheduledSync();
+      if (kDebugMode) {print('⏹️ Office hours (8 hours) are finished. Sync scheduler will not start.');}
+      return;
+    }
+
+    _scheduledTimer = Timer.periodic(
+      const Duration(minutes: syncIntervalMinutes),
+      (_) async {
+        try {
+          if(employee != null && commonUtil.isOfficeHourFinished(employee)) {
+            if (kDebugMode) {print('⏹️ Office duty time (8 hours) completed. Stopping scheduled sync timer.');}
+            stopScheduledSync();
+            return;
+          }
+          await _syncLocationToBackend(employee:employee);
+        } catch (e) {
+          if (kDebugMode) {
+            print('⚠️ [LocationService] Scheduled sync tick error caught (scheduler kept alive): $e');
+          }
+        }
+      },
+    );
+    // 4. Immediate first sync
+    _syncLocationToBackend(employee:employee);
+  }
+
   /// Sync location to backend API with RSA digital signature on payload
-  Future<void> _syncLocationToBackend({bool isManual = false}) async {
-    if (_isSyncing && !isManual) {
-      if (kDebugMode) {
-        print('⏳ Location sync already in progress, skipping periodic tick');
-      }
-      return;
-    }
-
-    // Check globals for token and employee
-    final token = globals.accessToken;
-    final employee = globals.currentEmployee;
-
-    if (token == null || employee == null || employee.userId.isEmpty) {
-      final msg = 'No authentication token or Employee ID found (ID: ${employee?.userId})';
-      if (kDebugMode) {
-        print('❌ $msg');
-      }
-      if (isManual) throw Exception(msg);
-      return;
-    }
-
-    _isSyncing = true;
-
+  Future<void> _syncLocationToBackend({EmployeeModel? employee}) async {
     try {
-      if (kDebugMode) {
-        print('📍 [LocationService] Fetching GPS coordinates for employee ${employee.userId}...');
-      }
-      // Get current location
       final location = await getCurrentLocation();
       if (kDebugMode) {
         print('📍 [LocationService] Coordinates retrieved: Lat=${location.latitude}, Lng=${location.longitude}');
       }
-
       // Prepare request body
       final requestBody = {
-        'employeeId': employee.userId,
+        'employeeId': employee?.userId,
         'longitude': location.longitude,
         'latitude': location.latitude,
         'date': DateTime.now().toIso8601String(),
+        'accessToken': employee?.token,
       };
 
+      final String? token = employee?.token;
       final String jsonBody = jsonEncode(requestBody);
-      // Canonical payload matching backend Option 3 (employeeId|longitude|latitude)
-      final String canonicalPayload = '${employee.userId}|${location.longitude}|${location.latitude}';
+      final String canonicalPayload = '${employee?.userId}|${location.longitude}|${location.latitude}';
 
-      // Sign canonical payload with stored RSA private key from Android KeyStore
-      if (kDebugMode) {
-        print('🔐 [LocationService] Signing canonical payload: "$canonicalPayload"');
-      }
       final String? signature = await SecurityService().signPayload(canonicalPayload);
-
       final Map<String, String> headers = {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       };
-
-      if (signature != null && signature.isNotEmpty) {
-        headers['X-Signature'] = signature;
-        headers['X-Payload-Signature'] = signature;
-      }
-
+        headers['X-Signature'] = signature.toString();
+        headers['X-Payload-Signature'] = signature.toString();
       final Uri syncUri = Uri.parse('$baseUrl$syncEndpoint');
       if (kDebugMode) {
         print('🌐 [LocationService] Sending POST $syncUri');
@@ -184,11 +181,6 @@ class LocationService {
         headers: headers,
         body: jsonBody,
       ).timeout(const Duration(seconds: 15));
-
-      if (kDebugMode) {
-        print('📡 [LocationService] Status Code: ${response.statusCode}');
-        print('📡 [LocationService] Response: ${response.body}');
-      }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
@@ -206,17 +198,11 @@ class LocationService {
       if (kDebugMode) {
         print('❌ Location sync error: $e');
       }
-      if (isManual) {
-        rethrow;
-      }
     } finally {
-      _isSyncing = false;
     }
   }
-
   /// Manual sync - call from UI
   Future<void> syncLocationNow() async {
-    await _syncLocationToBackend(isManual: true);
   }
-
 }
+final locationService = LocationService();

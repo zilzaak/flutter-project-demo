@@ -1,5 +1,6 @@
 // lib/screens/login_screen.dart
 import 'package:flutter/material.dart';
+import 'package:my_demo_project/models/employee_model.dart';
 import '../services/auth_service.dart';
 import 'employee_details_screen.dart';
 
@@ -10,12 +11,12 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final AuthService _authService = AuthService();
   final TextEditingController _userIdController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
+  EmployeeModel? employee;
 
   @override
   void dispose() {
@@ -41,7 +42,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await _authService.login(
+      await authService.login(
         userId: userId,
         password: password,
       );
@@ -52,7 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => const EmployeeDetailsScreen(),
+          builder: (context) => EmployeeDetailsScreen(employee:authService.employee),
         ),
       );
     } catch (e) {
@@ -75,14 +76,12 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await _authService.loginWithSSO();
-
+     final x =  await authService.loginWithSSO();
       if (!mounted) return;
-
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => const EmployeeDetailsScreen(),
+          builder: (context) =>  EmployeeDetailsScreen(employee:authService.employee),
         ),
       );
     } catch (e) {

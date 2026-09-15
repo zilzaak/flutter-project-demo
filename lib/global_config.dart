@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'models/employee_model.dart';
 
@@ -27,13 +28,12 @@ class GlobalConfig {
   // Global variables
   String? accessToken;          // JWT token
   EmployeeModel? currentEmployee;  // Employee data
-  bool isLoggedIn = false;
+
 
   // Helper methods
   void setAuthData(String token, EmployeeModel employee) {
     accessToken = token;
     currentEmployee = employee;
-    isLoggedIn = true;
 
     if (kDebugMode) {
       print('✅ Auth data set globally');
@@ -45,8 +45,6 @@ class GlobalConfig {
   void clearAuthData() {
     accessToken = null;
     currentEmployee = null;
-    isLoggedIn = false;
-
     if (kDebugMode) {
       print('✅ Auth data cleared');
     }
@@ -57,6 +55,5 @@ class GlobalConfig {
   // Check if token exists
   bool get hasToken => accessToken != null && accessToken!.isNotEmpty;
 }
-
 // Create a single instance to use everywhere
 final globals = GlobalConfig();

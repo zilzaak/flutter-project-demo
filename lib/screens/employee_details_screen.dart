@@ -2,9 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:my_demo_project/services/employee_api_service.dart';
 import '../global_config.dart';
 import '../models/employee_model.dart';
-import '../models/location_data_model.dart';
 import '../models/location_graph_model.dart';
 import '../services/auth_service.dart';
 import '../services/location_service.dart';
@@ -13,20 +13,15 @@ import 'login_screen.dart';
 
 
 class EmployeeDetailsScreen extends StatefulWidget {
-  const EmployeeDetailsScreen({super.key});
+  final EmployeeModel? employee;
+  const EmployeeDetailsScreen({super.key,this.employee});
   @override
   State<EmployeeDetailsScreen> createState() => _EmployeeDetailsScreenState();
 }
-
-class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
-  final LocationService _locationService = LocationService();
-  final AuthService _authService = AuthService();
+class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
   final MapController _mapController = MapController();
-
-  LocationDataModel? _currentLocation;
-  bool _isFetchingLocation = false;
   String? _locationError;
-  bool _isTracking = false;
+  bool _isTracking = true;
 
   // Location Graph state & 5-minute scheduler
   Timer? _graphRefreshTimer;
@@ -39,10 +34,11 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeLocationTracking();
     _fetchLocationGraph();
     _startGraphScheduler();
+    _initializeLocationTracking();
   }
+
 
   @override
   void dispose() {
@@ -54,46 +50,29 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
   /// Start 5-minute periodic scheduler for refreshing the location graph
   void _startGraphScheduler() {
     _graphRefreshTimer?.cancel();
-    _graphRefreshTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+    _graphRefreshTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       _fetchLocationGraph(isBackground: true);
     });
   }
 
   void _initializeLocationTracking() {
-    if (globals.currentEmployee != null) {
-      _locationService.startScheduledSync();
-      setState(() {
-        _isTracking = true;
-      });
-      _fetchLocation();
+    EmployeeModel? emp =  widget.employee;
+    if(emp==null){
+      emp = authService.employee;
     }
+    EmployeeModel? emp2;
+    if(emp==null){
+     if(employeeApiService.employee!=null){
+       emp2=employeeApiService.employee;
+     }else{
+       emp2=employeeApiService.employee;
+     }
+    }else{
+      emp2=emp;
+    }
+    locationService.startScheduledSync(emp2);
   }
 
-  Future<void> _fetchLocation() async {
-    setState(() {
-      _isFetchingLocation = true;
-      _locationError = null;
-    });
-
-    try {
-      final loc = await _locationService.getCurrentLocation();
-      if (!mounted) return;
-      setState(() {
-        _currentLocation = loc;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _locationError = e.toString().replaceAll('Exception: ', '');
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isFetchingLocation = false;
-        });
-      }
-    }
-  }
 
   /// Fetch location graph from API (called on load, every 5 min, and after manual sync)
   Future<void> _fetchLocationGraph({bool isBackground = false}) async {
@@ -126,6 +105,10 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
         }
         _isLoadingGraph = false;
       });
+    } finally {
+      // Graph failures must never hamper scheduled location sync
+      if (_isTracking) {
+      }
     }
   }
 
@@ -155,43 +138,9 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
     }
   }
 
-  Future<void> _manualSync() async {
-    setState(() {
-      _isFetchingLocation = true;
-    });
-
-    try {
-      await _locationService.syncLocationNow();
-      // Also refresh the location graph immediately so new point is reflected
-      await _fetchLocationGraph(isBackground: true);
-      _showSnackBar('✅ Location synced & graph updated', Colors.green);
-    } catch (e) {
-      _showSnackBar('❌ Failed to sync: ${e.toString()}', Colors.red);
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isFetchingLocation = false;
-        });
-      }
-    }
-  }
-
-  void _toggleTracking() {
-    setState(() {
-      _isTracking = !_isTracking;
-    });
-
-    if (_isTracking) {
-      _locationService.startScheduledSync();
-      _showSnackBar('📍 Tracking resumed', Colors.blue);
-    } else {
-      _showSnackBar('⏹️ Tracking paused', Colors.orange);
-    }
-  }
-
   void _handleLogout() {
     _graphRefreshTimer?.cancel();
-    _authService.logout();
+    authService.logout();
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -353,10 +302,8 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          await Future.wait([
-            _fetchLocation(),
-            _fetchLocationGraph(),
-          ]);
+          if (_isTracking) {
+          }
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -501,21 +448,6 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
                   size: 16,
                 ),
                 const SizedBox(width: 8),
-/*                TextButton.icon(
-                  onPressed: _toggleTracking,
-                  icon: Icon(
-                    _isTracking ? Icons.pause : Icons.play_arrow,
-                    size: 16,
-                    color: _isTracking ? Colors.orange : Colors.green,
-                  ),
-                  label: Text(
-                    _isTracking ? 'Pause' : 'Resume',
-                    style: TextStyle(
-                      color: _isTracking ? Colors.orange : Colors.green,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),*/
               ],
             ),
           ],
@@ -534,7 +466,7 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
                   children: [
                     Icon(
                       Icons.location_on,
-                      color: _currentLocation != null ? Colors.green : Colors.red,
+                      color: locationService.currentLocation != null ? Colors.green : Colors.red,
                       size: 28,
                     ),
                     const SizedBox(width: 10),
@@ -551,29 +483,12 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
                             ),
                           ),
                           Text(
-                            _currentLocation != null
-                                ? 'Last sync: ${_currentLocation!.timestamp?.toLocal().toString().substring(0, 19)}'
+                            locationService.currentLocation != null
+                                ? 'Last sync: ${locationService.currentLocation!.timestamp?.toLocal().toString().substring(0, 19)}'
                                 : 'Waiting for location...',
                             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                           ),
                         ],
-                      ),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: _isFetchingLocation ? null : _manualSync,
-                      icon: _isFetchingLocation
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.sync, size: 16),
-                      label: const Text('Sync Now'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.indigo,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        minimumSize: const Size(0, 36),
                       ),
                     ),
                   ],
@@ -592,13 +507,13 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
                       style: TextStyle(color: Colors.red.shade800, fontSize: 13),
                     ),
                   ),
-                ] else if (_currentLocation != null) ...[
+                ] else if (locationService.currentLocation != null) ...[
                   Row(
                     children: [
                       Expanded(
                         child: _buildCoordinateBox(
                           label: 'LATITUDE',
-                          value: _currentLocation!.latitude.toStringAsFixed(6),
+                          value: locationService.currentLocation!.latitude.toStringAsFixed(6),
                           color: Colors.blue.shade800,
                         ),
                       ),
@@ -606,7 +521,7 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
                       Expanded(
                         child: _buildCoordinateBox(
                           label: 'LONGITUDE',
-                          value: _currentLocation!.longitude.toStringAsFixed(6),
+                          value: locationService.currentLocation!.longitude.toStringAsFixed(6),
                           color: Colors.indigo.shade800,
                         ),
                       ),
@@ -619,7 +534,7 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'Accuracy: ~${_currentLocation!.accuracy?.toStringAsFixed(1)}m | Auto-sync every 1 min',
+                          'Accuracy: ~${locationService.currentLocation!.accuracy?.toStringAsFixed(1)}m | Auto-sync every 1 min',
                           style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                         ),
                       ),
@@ -762,7 +677,7 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
     final LatLng defaultCenter = const LatLng(23.777176, 90.399452);
     final initialCenter = data?.latestPoint?.toLatLng() ??
         data?.officeLatLng ??
-        (_currentLocation != null ? LatLng(_currentLocation!.latitude, _currentLocation!.longitude) : defaultCenter);
+        (locationService.currentLocation != null ? LatLng(locationService.currentLocation!.latitude, locationService.currentLocation!.longitude) : defaultCenter);
 
     return Stack(
       children: [

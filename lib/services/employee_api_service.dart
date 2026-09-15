@@ -7,41 +7,51 @@ import '../models/employee_model.dart';
 import 'security_service.dart';
 
 class EmployeeApiService {
+
   static const String baseUrl = GlobalConfig.baseUrl;
-  static const String employeeInfoEndpoint = '/api/ess/portal/employee-duty-monitoring/enroll-user';
-  static const String employeeInfoEndpoint2 = '/api/geoportal/employee-duty-monitoring/enroll-user';
+  static const String employeeInfoEndpoint = '/api/geoportal/geo-location/enroll-user';
+  EmployeeModel? employee;
 
   /// Fetch employee basic info from Spring Boot API and enroll device with RSA Key Pair
-  static Future<EmployeeModel> fetchEmployeeInfo({
-    required String employeeId,
-    required String date,
-    required String accessToken,
-  }) async {
+  Future<EmployeeModel> fetchEmployeeInfo({required String employeeId, required String date,required String accessToken,
+  })
+  async {
+
     try {
       final securityService = SecurityService();
-      // Step 1: Retrieve existing device public key or generate & store a new key pair once
       final String publicRsa = await securityService.getOrCreateDevicePublicKey();
-
       if (kDebugMode) {
         print('🔑 Using RSA Public Key for enrollment: ${publicRsa.substring(0, 30)}...');
       }
 
-      // Step 2: Call enroll-user API with the persistent public RSA key
-      final Uri uri = Uri.parse(
-        '$baseUrl$employeeInfoEndpoint2'
-        '?publicRsa=${Uri.encodeComponent(publicRsa)}',
-      );
+      // Step 2: Prepare body and RSA signature for enrollment
+      final Map<String, dynamic> requestPayload = {
+        'employeeId': employeeId,
+        'publicRsa': publicRsa,
+        'accessToken': accessToken,
+      };
 
+      final String jsonBody = jsonEncode(requestPayload);
+      final String canonicalPayload = '$employeeId|$publicRsa';
+      final String? signature = await securityService.signPayload(canonicalPayload);
+      final Uri uri = Uri.parse('$baseUrl$employeeInfoEndpoint');
       if (kDebugMode) {
-        print('🌐 Calling Enroll-User API: $uri');
+        print('🌐 Calling Enroll-User API (POST): $uri');
+        print('📦 Payload: $jsonBody');
       }
 
-      final response = await http.get(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $accessToken',
-        },
+      final Map<String, String> headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $accessToken',
+      };
+
+      if (signature != null && signature.isNotEmpty) {
+        headers['X-Signature'] = signature;
+      }
+
+      final response = await http.post(uri,
+        headers: headers,
+        body: jsonBody,
       );
 
       if (kDebugMode) {
@@ -56,6 +66,7 @@ class EmployeeApiService {
 
         employeeData['employeeId'] = employeeData['employeeId'] ?? employeeData['employee_id'] ?? employeeId;
         employeeData['token'] = accessToken;
+        employee = EmployeeModel.fromJson(employeeData);
         return EmployeeModel.fromJson(employeeData);
       } else {
         throw Exception('Failed to fetch employee info: ${response.statusCode} - ${response.body}');
@@ -68,3 +79,7 @@ class EmployeeApiService {
     }
   }
 }
+
+final employeeApiService = EmployeeApiService();
+
+

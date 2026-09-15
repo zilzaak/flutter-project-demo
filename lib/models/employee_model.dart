@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 class EmployeeModel {
   final String userId;
   final String name;
@@ -7,6 +9,7 @@ class EmployeeModel {
   final String startTime;
   final String endTime;
   final String? token;
+  final String firstPunch;
 
   const EmployeeModel({
     required this.userId,
@@ -17,6 +20,7 @@ class EmployeeModel {
     required this.startTime,
     required this.endTime,
     this.token,
+    required this.firstPunch,
   });
 
   /// Factory method to create an EmployeeModel from API JSON response
@@ -30,6 +34,7 @@ class EmployeeModel {
       startTime: json['startTime'] ?? '8:10 AM - 4:00 PM',
       endTime: json['endTime'] ?? '8:10 AM - 4:00 PM',
       token: token ?? json['token'] ?? json['access_token'],
+      firstPunch: json['firstPunch']?.toString() ?? '',
     );
   }
 
@@ -44,20 +49,39 @@ class EmployeeModel {
       'startTime': startTime,
       'endTime': endTime,
       'token': token,
+      'firstPunch': firstPunch,
     };
   }
 
-  /// Creates a demo employee profile for initial test/preview
-  factory EmployeeModel.demo({required String userId}) {
-    return EmployeeModel(
-      userId: userId.isNotEmpty ? userId : 'EMP-2024-892',
-      name: 'Alexander Wright',
-      designation: 'Senior Software Engineer',
-      department: 'Information Technology',
-      joiningDate: '15 Jan 2022',
-      startTime: '8:10 AM - 4:00 PM',
-      endTime: '8:10 AM - 4:00 PM',
-      token: 'demo_jwt_access_token_xyz_123456789',
-    );
+
+  DateTime? getWorkStartDateTime(String firstPunch, String startTime) {
+    final now = DateTime.now();
+    final fp = firstPunch;
+    if (fp.isNotEmpty) {
+      try {
+        return DateTime.parse(fp);
+      } catch (_) {
+      }
+    }
+    // 2. Fallback: combine today's date with startTime ("08:10:00")
+    final st = startTime;
+    if (st.isNotEmpty) {
+      try {
+        final t = DateFormat('HH:mm:ss').parse(st); // "08:10:00"
+        return DateTime(now.year, now.month, now.day, t.hour, t.minute, t.second);
+      } catch (_) {
+      }
+    }
+    return null;
   }
+
+  bool isOfficeHourFinished(DateTime startTime) {
+    final hours = DateTime.now().difference(startTime).inMinutes/ 60.0;
+    if (hours <= 8) {
+      return false;
+    } else {
+      return true;
+    }
+  }
+
 }
