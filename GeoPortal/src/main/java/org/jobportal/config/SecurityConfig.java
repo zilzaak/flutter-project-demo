@@ -1,5 +1,6 @@
 package org.jobportal.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
@@ -34,10 +35,13 @@ public class SecurityConfig {
      * ⚠️  Security Note: This means expired tokens will still be accepted by the backend.
      *     Use this only in controlled environments where long-lived sessions are required.
      */
+    @Value("${relm-name}")
+    private String relm;
+
     @Bean
     public JwtDecoder jwtDecoder() {
         // Keycloak JWK Set URI — used to fetch public keys for signature verification
-        String jwkSetUri = "https://auth0.diu.edu.bd/realms/demo/protocol/openid-connect/certs";
+        String jwkSetUri = "https://auth0.diu.edu.bd/realms/"+relm+"/protocol/openid-connect/certs";
         NimbusJwtDecoder jwtDecoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).jwsAlgorithm(SignatureAlgorithm.RS256).build();
         //    Use an EMPTY validator list — this disables ALL claim validations,
         //    including 'exp' (expiration), 'nbf' (not before), and 'iss' (issuer).

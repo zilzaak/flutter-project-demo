@@ -55,67 +55,13 @@ public class DutyMonitoringService {
         return ApiDTO.builder().data(info).message((String) result.get("out_message_description")).status(true).build();
     }
 
-    public ApiDTO geofanceConfig(GeofanceRequestDTO request, String preferredUsername) {
-        Boolean createResponse=request.getNewEmployeeIds()==null?true:false;
-        Boolean updateResponse=request.getExistEmployeeIds()==null?true:false;
-        String createMessage=null;
-        String updateMessage=null;
 
-
-            try {
-                if(request.getNewEmployeeIds()!=null){
-                    Map<String, Object> result = employeeGeofanceRepository.spEmployeeGeofanceSave(
-                            request.getGeofanceId(),
-                            request.getFacultyId(),
-                            request.getDepartmentId(),
-                            request.getNewEmployeeIds(),
-                            request.getOfficeLatitude(),
-                            request.getOfficeLongitude(),
-                            request.getOfficeRadius(),
-                            request.getOfficeName(),
-                            preferredUsername,"E");
-                    if (result.get("out_message_code").equals(0)) {
-                        createResponse=true;
-                    } else {
-                        createResponse=false;
-                    }
-                    createMessage=result.get("out_message_description").toString();
-                }
-                if(request.getExistEmployeeIds()!=null){
-                    Map<String, Object> result = employeeGeofanceRepository.spEmployeeGeofanceSave(
-                            request.getGeofanceId(),
-                            request.getFacultyId(),
-                            request.getDepartmentId(),
-                            request.getNewEmployeeIds(),
-                            request.getOfficeLatitude(),
-                            request.getOfficeLongitude(),
-                            request.getOfficeRadius(),
-                            request.getOfficeName(),
-                            preferredUsername,"U");
-                    if (result.get("out_message_code").equals(0)) {
-                        updateResponse=true;
-                    } else {
-                        updateResponse=false;
-                    }
-                    updateMessage=result.get("out_message_description").toString();
-                }
-
-                if(!createResponse && !updateResponse){
-                    return ApiDTO.builder().status(false).message(createMessage+','+updateMessage).build();
-                }
-                return ApiDTO.builder().status(false).message(createMessage+','+updateMessage).build();
-            } catch (Exception e) {
-                return ApiDTO.builder().status(false).message(e.getMessage()).build();
-            }
-
-
-    }
 
 
     public ApiDTO syncEmployeeLocation(EmployeeDistanceRequestDTO request, String signature, String preferredUsername) {
         try {
             UsersEnrollment usersEnrollment = usersEnrollmentRepository.findByEmployeeIdAndActive(request.getEmployeeId(),true);
-            if (usersEnrollment == null || !usersEnrollment.getAccessToken().equals(request.getAccessToken())) {
+            if (usersEnrollment == null) {
                 return ApiDTO.builder().status(false).message("Employee is not enrolled or invalid token").build();
             }
 
@@ -180,7 +126,7 @@ public class DutyMonitoringService {
 
     public ApiDTO myLocationGraph(String userId, String accessToken, String signature, LocalDate now) {
         UsersEnrollment usersEnrollment = usersEnrollmentRepository.findByEmployeeIdAndActive(userId, true);
-        if (usersEnrollment == null || usersEnrollment.getAccessToken() == null || !usersEnrollment.getAccessToken().equals(accessToken)) {
+        if (usersEnrollment == null) {
             return ApiDTO.builder().status(false).message("Employee is not enrolled or invalid token").build();
         }
 
@@ -212,52 +158,4 @@ public class DutyMonitoringService {
     }
 
 
-    public ApiDTO LocationGraph(String employeeId, String dateString) {
-        try {
-            List<Map<String, Double>> locationPoints = employeeDistanceHistoryRepository.myLocationGraph(employeeId, LocalDate.parse(dateString));
-            EmployeeGeofance employeeGeofance = employeeGeofanceRepository.findByEmployeeId(employeeId);
-            Map<String, Object> response = new HashMap<>();
-            response.put("officeLatitude", employeeGeofance.getGeofance().getLatitude());
-            response.put("officeLongitude", employeeGeofance.getGeofance().getLongitude());
-            response.put("locationPoints", locationPoints);
-            return ApiDTO.builder().data(response).status(true).build();
-        } catch (Exception e) {
-            return ApiDTO.builder().status(false).message(e.getMessage()).build();
-        }
-    }
-
-
-    public ApiDTO getGeofanceList() {
-        try {
-            List<Map<String, Object>> geofanceList = geofanceRepository.geofanceList();
-            return ApiDTO.builder().data(geofanceList).status(true).build();
-        } catch (Exception e) {
-            return ApiDTO.builder().status(false).message(e.getMessage()).build();
-        }
-    }
-
-    public ApiDTO employeeGeofance(Long facultyId,Long departmentId,String employeeIds,Boolean isAssigned,Integer pageNo,Integer pageSize) {
-        if(facultyId!=null){
-            departmentId=null;
-            employeeIds=null;
-        }
-        if(departmentId!=null){
-            facultyId=null;
-            employeeIds=null;
-        }
-        if(employeeIds!=null && employeeIds.trim().isEmpty()){
-            facultyId=null;
-            departmentId=null;
-        }
-        if(pageNo==null){
-            pageNo=1;
-            pageSize=20;
-        }
-        try {
-            Page<Map<String, Object>> page = employeeGeofanceRepository.employeeGeofanc(facultyId,departmentId,employeeIds,isAssigned, PageRequest.of(pageNo-1,pageSize));
-            return ApiDTO.builder().data(page.getContent()).status(true).totalPages(page.getTotalPages()).totalRecords((int) page.getTotalElements()).build();
-        } catch (Exception e) {
-            return ApiDTO.builder().status(false).message(e.getMessage()).build();
-        }
-    }
 }

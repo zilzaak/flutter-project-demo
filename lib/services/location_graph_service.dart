@@ -22,10 +22,7 @@ class LocationGraphService {
     }
 
     final String todayDate = DateTime.now().toIso8601String().split('T').first;
-    // Canonical payload matching backend: userId|date or userId
     final String canonicalPayload = '$empId|$todayDate';
-
-    // Sign canonical payload with stored device RSA private key
     final String? signature = await SecurityService().signPayload(canonicalPayload);
 
     final Uri uri = Uri.parse('${GlobalConfig.baseUrl}$endpoint').replace(

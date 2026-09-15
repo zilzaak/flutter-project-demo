@@ -5,6 +5,7 @@ import '../global_config.dart';
 import '../models/employee_model.dart';
 import '../services/employee_api_service.dart';
 import 'location_service.dart';
+import 'token_cache_service.dart';
 
 class AuthService {
 
@@ -36,7 +37,11 @@ class AuthService {
       final Map<String, dynamic> claims = _decodeJwtPayload(idToken);
       final String employeeId = claims['preferred_username']?.toString() ?? '';
 
-      // Store credentials immediately so auto-recovery works even if network hiccups
+      // ── Save fresh token to secure key store (overwrite same-day entry,
+      //    evict any previous-date token automatically). ───────────────────
+      await tokenCacheService.saveAndEvictOld(accessToken);
+
+      // Store credentials in globals immediately for rest of app.
       globals.accessToken = accessToken;
 
       if (kDebugMode) {
@@ -45,21 +50,36 @@ class AuthService {
         debugPrint('Email      : ${claims['email'] ?? ''}');
       }
 
-      final  employee = await employeeApiService.fetchEmployeeInfo(employeeId: employeeId, date: DateTime.now()
-            .toIso8601String().split('T').first,accessToken: accessToken,);
+      final employee = await employeeApiService.fetchEmployeeInfo(
+        employeeId: employeeId,
+        date: DateTime.now().toIso8601String().split('T').first,
+        accessToken: accessToken,
+      );
 
-      globals.setAuthData(accessToken, employee);
+      // Build employee object with the fresh token embedded.
+      final employeeWithToken = EmployeeModel(
+        userId: employee.userId,
+        name: employee.name,
+        designation: employee.designation,
+        department: employee.department,
+        joiningDate: employee.joiningDate,
+        startTime: employee.startTime,
+        endTime: employee.endTime,
+        firstPunch: employee.firstPunch,
+        token: accessToken,   // ← token field always reflects the fresh token
+      );
+
+      globals.setAuthData(accessToken, employeeWithToken);
 
       if (kDebugMode) {
         debugPrint('==============================================');
         debugPrint('SSO LOGIN COMPLETE');
-        debugPrint(
-          'Employee: ${employee.name} (${employee.userId})',
-        );
+        debugPrint('Employee : ${employeeWithToken.name} (${employeeWithToken.userId})');
+        debugPrint('Token cached under today key in key store.');
         debugPrint('==============================================');
       }
-      this.employee=employee;
-      return employee;
+      this.employee = employeeWithToken;
+      return employeeWithToken;
     } on FlutterAppAuthUserCancelledException {
       throw Exception('SSO login was cancelled.');
     } on FlutterAppAuthPlatformException catch (e) {
@@ -132,9 +152,18 @@ class AuthService {
   // SESSION MANAGEMENT
   // ============================================================
 
+  /// Stops background location sync.
+  ///
+  /// NOTE: Auth data (globals.accessToken, globals.currentEmployee) and the
+  /// key-store token cache are intentionally NOT cleared here.
+  /// The session must remain alive for up to 8 hours of continuous service;
+  /// token expiration is handled on the backend (Spring Boot ignores exp).
   void logout() {
     LocationService().stopScheduledSync();
-    globals.clearAuthData();
+    // globals.clearAuthData() ← deliberately disabled for continuous 8-h session
+    if (kDebugMode) {
+      debugPrint('⏹️  [AuthService] Location sync stopped. Session kept alive (8-h mode).');
+    }
   }
 
   String? getAccessToken() {

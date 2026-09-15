@@ -293,10 +293,18 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
         backgroundColor: Colors.indigo.shade700,
         elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            tooltip: 'Logout',
-            onPressed: _handleLogout,
+          // ⏰ Logout is intentionally disabled during a shift.
+          // Session must remain alive for the full 8-hour continuous service window.
+          // Token expiration is suppressed on the backend (Spring Boot SecurityConfig).
+          Tooltip(
+            message: 'Session is active (8-h service mode)',
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              child: Icon(
+                Icons.lock_clock,
+                color: Colors.white.withOpacity(0.6),
+              ),
+            ),
           ),
         ],
       ),

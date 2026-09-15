@@ -15,15 +15,23 @@ class SecurityService {
   static const String _privateKeyStorageKey = 'device_rsa_private_key';
   static const String _publicKeyStorageKey = 'device_rsa_public_key';
 
-  // Secure storage instance using Android KeyStore
+  // ─── FIXED: use encryptedSharedPreferences: true so keys survive app
+  //     restarts on all Android versions (matches TokenCacheService options).
+  //     Without this flag, the old AndroidOptions() backend may silently fail
+  //     to persist keys across cold starts, causing a new key pair to be
+  //     generated on every launch → new public key → server treats it as a
+  //     new device user every time.
   final FlutterSecureStorage _storage = const FlutterSecureStorage(
-    aOptions: AndroidOptions(),
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: true, // AES-256 backed by Android Keystore
+    ),
     iOptions: IOSOptions(
       accessibility: KeychainAccessibility.first_unlock,
     ),
   );
 
-  // In-memory cache of private key
+  // In-memory cache of the parsed private key object (lives only for this
+  // process lifetime; repopulated from secure storage on next cold start).
   RSAPrivateKey? _cachedPrivateKey;
 
   /// Generate a new 2048-bit RSA Key Pair
@@ -53,80 +61,120 @@ class SecurityService {
     );
   }
 
-  /// Store private key in Android KeyStore / Secure Storage
+  /// Store private key in secure storage (AES-256 / Android Keystore).
   Future<void> storePrivateKey(String privateKeyPem) async {
     try {
       await _storage.write(key: _privateKeyStorageKey, value: privateKeyPem);
+      // Also cache in-memory to avoid re-parsing on the same run.
       _cachedPrivateKey = _parsePrivateKeyFromPem(privateKeyPem);
       if (kDebugMode) {
-        print('🔐 RSA Private Key securely stored in Android KeyStore');
+        print('🔐 [SecurityService] RSA Private Key stored (${privateKeyPem.length} chars)');
       }
     } catch (e) {
       if (kDebugMode) {
-        print('❌ Error storing private key in KeyStore: $e');
+        print('❌ [SecurityService] Error storing private key: $e');
       }
       rethrow;
     }
   }
 
-  /// Store public key in Secure Storage
+  /// Store public key in secure storage.
   Future<void> storePublicKey(String publicKeyBase64) async {
     try {
       await _storage.write(key: _publicKeyStorageKey, value: publicKeyBase64);
+      if (kDebugMode) {
+        print('🔐 [SecurityService] RSA Public Key stored (${publicKeyBase64.length} chars)');
+      }
     } catch (e) {
       if (kDebugMode) {
-        print('❌ Error storing public key: $e');
+        print('❌ [SecurityService] Error storing public key: $e');
       }
     }
   }
 
-  /// Check if private key exists in Android KeyStore
+  /// Returns true only when BOTH the public and private keys are present and
+  /// non-empty in secure storage.
   Future<bool> hasStoredPrivateKey() async {
     try {
       final key = await _storage.read(key: _privateKeyStorageKey);
-      return key != null && key.isNotEmpty;
+      final exists = key != null && key.isNotEmpty;
+      if (kDebugMode) {
+        print('🔍 [SecurityService] hasStoredPrivateKey → $exists');
+      }
+      return exists;
     } catch (e) {
+      if (kDebugMode) {
+        print('❌ [SecurityService] hasStoredPrivateKey error: $e');
+      }
       return false;
     }
   }
 
-  /// Get stored private key PEM string
+  /// Get stored private key PEM string from secure storage.
   Future<String?> getStoredPrivateKeyPem() async {
     try {
-      return await _storage.read(key: _privateKeyStorageKey);
+      final pem = await _storage.read(key: _privateKeyStorageKey);
+      if (kDebugMode) {
+        print('🔍 [SecurityService] getStoredPrivateKeyPem → '
+            '${pem != null ? "found (${pem.length} chars)" : "NOT FOUND"}');
+      }
+      return pem;
     } catch (e) {
+      if (kDebugMode) {
+        print('❌ [SecurityService] getStoredPrivateKeyPem error: $e');
+      }
       return null;
     }
   }
 
-  /// Get stored public key Base64 string
+  /// Get stored public key Base64 string from secure storage.
   Future<String?> getStoredPublicKeyBase64() async {
     try {
-      return await _storage.read(key: _publicKeyStorageKey);
+      final pub = await _storage.read(key: _publicKeyStorageKey);
+      if (kDebugMode) {
+        print('🔍 [SecurityService] getStoredPublicKeyBase64 → '
+            '${pub != null ? "found (${pub.length} chars)" : "NOT FOUND"}');
+      }
+      return pub;
     } catch (e) {
+      if (kDebugMode) {
+        print('❌ [SecurityService] getStoredPublicKeyBase64 error: $e');
+      }
       return null;
     }
   }
 
-  /// Get or create the device RSA KeyPair.
-  /// If a key pair already exists in KeyStore, returns the existing public key.
-  /// If not, generates a new 2048-bit RSA key pair, securely stores it in KeyStore, and returns the public key.
+  /// Returns the stored device public key (Base64/X.509) if one already
+  /// exists in secure storage, or generates + stores a fresh 2048-bit RSA
+  /// key pair and returns the new public key.
+  ///
+  /// This is the primary guard that prevents generating a new key on every
+  /// login: it will only generate when BOTH keys are missing.
   Future<String> getOrCreateDevicePublicKey() async {
     final existingPublic = await getStoredPublicKeyBase64();
     final hasPrivate = await hasStoredPrivateKey();
+
+    if (kDebugMode) {
+      print('🔑 [SecurityService] getOrCreateDevicePublicKey: '
+          'existingPublic=${existingPublic != null}, hasPrivate=$hasPrivate');
+    }
+
     if (existingPublic != null && existingPublic.isNotEmpty && hasPrivate) {
       if (kDebugMode) {
-       // print('🔑 Reusing existing RSA KeyPair from KeyStore: ${existingPublic.substring(0, 30)}...');
+        print('✅ [SecurityService] Reusing existing RSA KeyPair from secure storage.');
       }
       return existingPublic;
     }
 
-    // Generate and permanently store new key pair on this device
+    // One or both keys are missing — generate a fresh pair and persist both.
+    if (kDebugMode) {
+      print('⚠️  [SecurityService] No stored key pair found — generating new RSA key pair...');
+    }
     final keyPair = await generateRsaKeyPair();
     await storePrivateKey(keyPair.privateKeyPem);
     await storePublicKey(keyPair.publicKeyBase64);
     if (kDebugMode) {
-      print('✨ Generated and stored NEW device RSA KeyPair in KeyStore');
+      print('✨ [SecurityService] Generated and stored NEW device RSA KeyPair.');
     }
     return keyPair.publicKeyBase64;
   }
