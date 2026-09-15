@@ -1,3 +1,4 @@
+/*
 package org.jobportal.controller;
 
 
@@ -23,6 +24,7 @@ public class GeoLocationControllerSecond {
 
     private final DutyMonitoringService employeeDutyMonitoringService;
 
+*/
 /*
     @PostMapping("/geofance-config")
     public ResponseEntity<ApiDTO> geofanceConfig(
@@ -52,7 +54,8 @@ public class GeoLocationControllerSecond {
     ) {
         ApiDTO response = employeeDutyMonitoringService.getGeofanceList();
         return new ResponseEntity<>(response, HttpStatus.OK);
-    }*/
+    }*//*
+
 
 
     @PostMapping("/enroll-user")
@@ -92,3 +95,4 @@ public class GeoLocationControllerSecond {
 
 
 }
+*/
