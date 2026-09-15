@@ -1,8 +1,6 @@
 import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
-
 import '../global_config.dart';
 import '../models/employee_model.dart';
 import '../services/employee_api_service.dart';
@@ -29,7 +27,6 @@ class AuthService {
       if (response == null) {throw Exception('SSO login was cancelled.');
       }
       if (response.accessToken == null || response.accessToken!.isEmpty) {throw Exception('Keycloak did not return an access token.');}
-
 
       final String accessToken = response.accessToken!;
       final String? idToken = response.idToken;
@@ -119,9 +116,7 @@ class AuthService {
     }
 
     final String normalized = base64Url.normalize(parts[1]);
-
     final String payload = utf8.decode(base64Url.decode(normalized));
-
     final dynamic decoded = jsonDecode(payload);
 
     if (decoded is! Map<String, dynamic>) {
@@ -149,7 +144,6 @@ class AuthService {
   EmployeeModel? getCurrentEmployee() {
     return globals.currentEmployee;
   }
-
 
 }
 final authService = AuthService();
