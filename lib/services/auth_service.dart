@@ -25,9 +25,7 @@ class AuthService {
           scopes: _scopes,
         ),
       );
-
-      if (response == null) {throw Exception('SSO login was cancelled.');
-      }
+      if (response == null) {throw Exception('SSO login was cancelled.');}
       if (response.accessToken == null || response.accessToken!.isEmpty) {throw Exception('Keycloak did not return an access token.');}
 
       final String accessToken = response.accessToken!;
@@ -35,7 +33,7 @@ class AuthService {
       if (idToken == null || idToken.isEmpty) {
         throw Exception('Keycloak did not return an ID token.');
       }
-      final Map<String, dynamic> claims = _decodeJwtPayload(idToken);
+      final Map<String, dynamic> claims = decodeJwtPayload(idToken);
       final String employeeId = claims['preferred_username']?.toString() ?? '';
 
       // ── Save fresh token to secure key store (overwrite same-day entry,
@@ -127,25 +125,21 @@ class AuthService {
   //
   // Actual security validation must happen in Spring Boot.
   //
-  Map<String, dynamic> _decodeJwtPayload(String token) {
+  Map<String, dynamic> decodeJwtPayload(String token) {
     final List<String> parts = token.split('.');
-
     if (parts.length != 3) {
       throw const FormatException(
         'Invalid JWT: expected 3 parts.',
       );
     }
-
     final String normalized = base64Url.normalize(parts[1]);
     final String payload = utf8.decode(base64Url.decode(normalized));
     final dynamic decoded = jsonDecode(payload);
-
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException(
         'Invalid JWT payload.',
       );
     }
-
     return decoded;
   }
 

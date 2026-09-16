@@ -1,6 +1,7 @@
 // lib/screens/login_screen.dart
 import 'package:flutter/material.dart';
 import 'package:my_demo_project/models/employee_model.dart';
+import 'package:my_demo_project/services/cached_employee_checker.dart';
 import '../services/auth_service.dart';
 import 'employee_details_screen.dart';
 
@@ -24,6 +25,53 @@ class _LoginScreenState extends State<LoginScreen> {
     _passwordController.dispose();
     super.dispose();
   }
+
+  @override
+  void initState() {
+    super.initState();
+    _checkCachedEmployee();
+  }
+
+  Future<void> _checkCachedEmployee() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final EmployeeModel? cachedEmployee = await cachedEmployeeChecker.checkCachedEmployee();
+      if (!mounted) return;
+      // ============================================================
+      // CACHED TOKEN EXISTS + EMPLOYEE FETCH SUCCESSFUL
+      // ============================================================
+      if (cachedEmployee != null) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                EmployeeDetailsScreen(
+                  employee: cachedEmployee,
+                ),
+          ),
+        );
+        return;
+      }
+      // ============================================================
+      // NO CACHED TOKEN
+      // ============================================================
+      setState((){
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage =
+        e.toString().replaceAll('Exception: ', '');
+      });
+    }
+  }
+
 
   Future<void> _login() async {
     final userId = _userIdController.text.trim();
@@ -99,6 +147,8 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -133,8 +183,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+
+
                 const Text(
-                  'Employee Attendance Tracker',
+                  'Geo Location Tracker',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 22,
@@ -143,14 +195,54 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 6),
+
+
+
                 const Text(
                   'Sign in with your DIU credentials',
                   style: TextStyle(color: Colors.grey, fontSize: 14),
                 ),
                 const SizedBox(height: 28),
 
+
+                if (_isLoading) ...[
+                  const SizedBox(height: 35),
+
+                  const SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      color: Colors.indigo,
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  const Text(
+                    'Checking existing session...',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  Text(
+                    'Please wait',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                ]
+
                 // SSO Sign In Button (Primary Option)
-                SizedBox(
+               else SizedBox(
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton.icon(
