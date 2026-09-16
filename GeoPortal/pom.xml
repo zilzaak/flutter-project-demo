@@ -81,7 +81,7 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <mainClass>org.jobportal.JobPortalApplication</mainClass>
+                    <mainClass>org.jobportal.GeoPortalApplication</mainClass>
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>

@@ -4,6 +4,7 @@ import 'package:flutter_appauth/flutter_appauth.dart';
 import '../global_config.dart';
 import '../models/employee_model.dart';
 import '../services/employee_api_service.dart';
+import 'background_location_service.dart';
 import 'location_service.dart';
 import 'token_cache_service.dart';
 
@@ -160,6 +161,7 @@ class AuthService {
   /// token expiration is handled on the backend (Spring Boot ignores exp).
   void logout() {
     LocationService().stopScheduledSync();
+    BackgroundLocationService.stopTracking();
     // globals.clearAuthData() ← deliberately disabled for continuous 8-h session
     if (kDebugMode) {
       debugPrint('⏹️  [AuthService] Location sync stopped. Session kept alive (8-h mode).');

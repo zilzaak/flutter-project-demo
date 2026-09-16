@@ -43,6 +43,8 @@ dependencies:
   pointycastle: ^4.0.0
   crypto: ^3.0.7
   flutter_appauth: ^12.1.0
+  flutter_background_service: ^5.0.9
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:

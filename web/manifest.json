@@ -1,6 +1,6 @@
 {
-    "name": "my_demo_project",
-    "short_name": "my_demo_project",
+    "name": "DIU Tracker",
+    "short_name": "DIU Location Tracker",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

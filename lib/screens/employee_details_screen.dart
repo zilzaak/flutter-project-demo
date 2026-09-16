@@ -7,6 +7,7 @@ import '../global_config.dart';
 import '../models/employee_model.dart';
 import '../models/location_graph_model.dart';
 import '../services/auth_service.dart';
+import '../services/background_location_service.dart';
 import '../services/location_service.dart';
 import '../services/location_graph_service.dart';
 import 'login_screen.dart';
@@ -25,6 +26,7 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
 
   // Location Graph state & 5-minute scheduler
   Timer? _graphRefreshTimer;
+  StreamSubscription? _bgLocationSub;
   LocationGraphData? _graphData;
   bool _isLoadingGraph = false;
   String? _graphError;
@@ -42,6 +44,8 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
 
   @override
   void dispose() {
+    locationService.onLocationSynced = null;
+    _bgLocationSub?.cancel();
     _graphRefreshTimer?.cancel();
     _mapController.dispose();
     super.dispose();
@@ -56,20 +60,28 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
   }
 
   void _initializeLocationTracking() {
-    EmployeeModel? emp =  widget.employee;
-    if(emp==null){
+    EmployeeModel? emp = widget.employee;
+    if (emp == null) {
       emp = authService.employee;
     }
     EmployeeModel? emp2;
-    if(emp==null){
-     if(employeeApiService.employee!=null){
-       emp2=employeeApiService.employee;
-     }else{
-       emp2=employeeApiService.employee;
-     }
-    }else{
-      emp2=emp;
+    if (emp == null) {
+      if (employeeApiService.employee != null) {
+        emp2 = employeeApiService.employee;
+      } else {
+        emp2 = employeeApiService.employee;
+      }
+    } else {
+      emp2 = emp;
     }
+
+    // Automatically refresh UI coordinates whenever LocationService performs a sync
+    locationService.onLocationSynced = () {
+      if (mounted) {
+        setState(() {});
+      }
+    };
+
     locationService.startScheduledSync(emp2);
   }
 
@@ -139,7 +151,9 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
   }
 
   void _handleLogout() {
+    _bgLocationSub?.cancel();
     _graphRefreshTimer?.cancel();
+    BackgroundLocationService.stopTracking();
     authService.logout();
     Navigator.pushReplacement(
       context,

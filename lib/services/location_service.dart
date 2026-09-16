@@ -7,6 +7,8 @@ import 'package:my_demo_project/utility/CommonUtil.dart';
 import '../global_config.dart';
 import '../models/employee_model.dart';
 import '../models/location_data_model.dart';
+import 'package:intl/intl.dart';
+import 'background_location_service.dart';
 import 'security_service.dart';
 
 class LocationService {
@@ -14,6 +16,7 @@ class LocationService {
   static const String syncEndpoint = '/api/geoportal/geo-location/sync-employee-location';
   static const int syncIntervalMinutes = 1;
   LocationDataModel? currentLocation;
+  VoidCallback? onLocationSynced;
   // Controllers
   Timer? _scheduledTimer;
 
@@ -104,32 +107,37 @@ class LocationService {
   void stopScheduledSync() {
     _scheduledTimer?.cancel();
     _scheduledTimer = null;
+    BackgroundLocationService.stopTracking();
     if (kDebugMode) {
       print('⏹️ Scheduled location sync stopped');
     }
   }
 
-  /// Start scheduled location sync every 1 minute
+  /// Start scheduled location sync every 1 minute (keeps running when screen is off)
   void startScheduledSync(EmployeeModel? employee) {
-    // 1. Cancel previous timer so starting a new timer never leaves duplicates
     _scheduledTimer?.cancel();
     _scheduledTimer = null;
     if (employee != null && commonUtil.isOfficeHourFinished(employee)) {
       stopScheduledSync();
-      if (kDebugMode) {print('⏹️ Office hours (8 hours) are finished. Sync scheduler will not start.');}
+      if (kDebugMode) {
+        print('⏹️ Office hours (8 hours) are finished. Sync scheduler will not start.');
+      }
       return;
     }
 
+    // 1. Periodic scheduler every 1 minute (heart of the app)
     _scheduledTimer = Timer.periodic(
       const Duration(minutes: syncIntervalMinutes),
       (_) async {
         try {
-          if(employee != null && commonUtil.isOfficeHourFinished(employee)) {
-            if (kDebugMode) {print('⏹️ Office duty time (8 hours) completed. Stopping scheduled sync timer.');}
+          if (employee != null && commonUtil.isOfficeHourFinished(employee)) {
+            if (kDebugMode) {
+              print('⏹️ Office duty time (8 hours) completed. Stopping scheduled sync timer.');
+            }
             stopScheduledSync();
             return;
           }
-          await _syncLocationToBackend(employee:employee);
+          await _syncLocationToBackend(employee: employee);
         } catch (e) {
           if (kDebugMode) {
             print('⚠️ [LocationService] Scheduled sync tick error caught (scheduler kept alive): $e');
@@ -137,8 +145,12 @@ class LocationService {
         }
       },
     );
-    // 4. Immediate first sync
-    _syncLocationToBackend(employee:employee);
+
+    // 2. Immediate first sync
+    _syncLocationToBackend(employee: employee);
+
+    // 3. Keep CPU & process awake when phone screen is turned off
+    BackgroundLocationService.startTracking(employee);
   }
 
   /// Sync location to backend API with RSA digital signature on payload
@@ -191,6 +203,12 @@ class LocationService {
         if (kDebugMode) {
           print('✅ Location synced with RSA signature: ${location.latitude}, ${location.longitude}');
         }
+        final timeStr = DateFormat('hh:mm:ss a').format(DateTime.now());
+        BackgroundLocationService.updateNotification(
+          title: '📍 Location Tracking Active',
+          content: 'Last sync: $timeStr | Lat: ${location.latitude.toStringAsFixed(4)}, Lng: ${location.longitude.toStringAsFixed(4)}',
+        );
+        onLocationSynced?.call();
       } else {
         throw Exception('Server error ${response.statusCode}: ${response.body}');
       }
@@ -202,7 +220,8 @@ class LocationService {
     }
   }
   /// Manual sync - call from UI
-  Future<void> syncLocationNow() async {
+  Future<void> syncLocationNow({EmployeeModel? employee}) async {
+    await _syncLocationToBackend(employee: employee ?? globals.currentEmployee);
   }
 }
 final locationService = LocationService();
