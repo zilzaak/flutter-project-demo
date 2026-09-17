@@ -9,7 +9,7 @@ import '../models/employee_model.dart';
 import '../models/location_data_model.dart';
 import 'package:intl/intl.dart';
 import 'background_location_service.dart';
-import 'security_service.dart';
+import 'employee_cached_location_service.dart';
 
 class LocationService {
   static const String baseUrl = GlobalConfig.baseUrl;
@@ -86,7 +86,7 @@ class LocationService {
       throw Exception('Unable to acquire GPS coordinates. Please ensure GPS is enabled and device has satellite/network connectivity.');
     }
 
-    this.currentLocation=LocationDataModel(
+    currentLocation = LocationDataModel(
       latitude: position.latitude,
       longitude: position.longitude,
       accuracy: position.accuracy,
@@ -137,7 +137,7 @@ class LocationService {
             stopScheduledSync();
             return;
           }
-          await _syncLocationToBackend(employee: employee);
+          await _recordAndSyncLocation(employee: employee);
         } catch (e) {
           if (kDebugMode) {
             print('⚠️ [LocationService] Scheduled sync tick error caught (scheduler kept alive): $e');
@@ -146,48 +146,93 @@ class LocationService {
       },
     );
 
-    // 2. Immediate first sync
-    _syncLocationToBackend(employee: employee);
+    // 2. Immediate first tick
+    _recordAndSyncLocation(employee: employee);
 
     // 3. Keep CPU & process awake when phone screen is turned off
     BackgroundLocationService.startTracking(employee);
   }
 
-  /// Sync location to backend API with RSA digital signature on payload
-  Future<void> _syncLocationToBackend({EmployeeModel? employee}) async {
+  /// Records the current location into app cache and triggers backend API call
+  /// only when the cache size reaches 5 or multiples of 5 (5*n).
+  Future<void> _recordAndSyncLocation({EmployeeModel? employee}) async {
     try {
       final location = await getCurrentLocation();
+      currentLocation = location;
       if (kDebugMode) {
         print('📍 [LocationService] Coordinates retrieved: Lat=${location.latitude}, Lng=${location.longitude}');
       }
-      // Prepare request body
-      final requestBody = {
-        'employeeId': employee?.userId,
+
+      final String empId = employee?.userId ?? globals.currentEmployee?.userId ?? '';
+      final String? token = employee?.token ?? globals.accessToken;
+
+      // Prepare location data point matching backend EmployeeDistanceRequestDTO
+      final locationEntry = {
+        'employeeId': empId,
         'longitude': location.longitude,
         'latitude': location.latitude,
-        'date': DateTime.now().toIso8601String(),
-        'accessToken': employee?.token,
+        'date': (location.timestamp ?? DateTime.now()).toIso8601String(),
+        'accessToken': token,
       };
 
-      final String? token = employee?.token;
-      final String jsonBody = jsonEncode(requestBody);
-      final String canonicalPayload = '${employee?.userId}|${location.longitude}|${location.latitude}';
+      // Store in persistent app cache
+      await employeeCachedLocationService.addLocation(locationEntry);
+      final List<Map<String, dynamic>> cachedLocations =
+          await employeeCachedLocationService.getCachedLocations();
+      final int cacheCount = cachedLocations.length;
+      final timeStr = DateFormat('hh:mm:ss a').format(DateTime.now());
 
-      final String? signature = await SecurityService().signPayload(canonicalPayload);
+      if (kDebugMode) {
+        print('📦 [LocationService] Current cached locations count: $cacheCount');
+      }
+
+      // Condition: array list size is 5 or product of 5 (5*n, where n=1,2,3...)
+      if (cacheCount > 0 && cacheCount % 5 == 0) {
+        if (kDebugMode) {
+          print('🚀 [LocationService] Cache count ($cacheCount) reached multiple of 5. Syncing to backend...');
+        }
+        await _syncCachedLocationsToBackend(
+          cachedLocations: cachedLocations,
+          token: token,
+          location: location,
+        );
+      } else {
+        if (kDebugMode) {
+          print('⏳ [LocationService] Cache count ($cacheCount) not a multiple of 5. Skipping backend call to keep server relaxed.');
+        }
+        BackgroundLocationService.updateNotification(
+          title: '📍 Location Tracking Active',
+          content: 'Last recorded: $timeStr | Cached: $cacheCount pts (next sync at ${((cacheCount ~/ 5) + 1) * 5})',
+        );
+        onLocationSynced?.call();
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ [LocationService] Location tick error: $e');
+      }
+    }
+  }
+
+  /// Sends the cached locations array to backend /sync-employee-location.
+  /// If successful, cache is cleared to 0.
+  /// If failed, cache is preserved without data loss.
+  Future<void> _syncCachedLocationsToBackend({
+    required List<Map<String, dynamic>> cachedLocations,
+    String? token,
+    required LocationDataModel location,
+  }) async {
+    try {
+      final String jsonBody = jsonEncode(cachedLocations);
       final Map<String, String> headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
       };
-        headers['X-Signature'] = signature.toString();
-        headers['X-Payload-Signature'] = signature.toString();
       final Uri syncUri = Uri.parse('$baseUrl$syncEndpoint');
       if (kDebugMode) {
-        print('🌐 [LocationService] Sending POST $syncUri');
+        print('🌐 [LocationService] Sending POST $syncUri with ${cachedLocations.length} locations');
         print('🌐 [LocationService] Headers: $headers');
         print('🌐 [LocationService] Body: $jsonBody');
       }
-
-      // Send to backend
       final response = await http.post(
         syncUri,
         headers: headers,
@@ -200,28 +245,34 @@ class LocationService {
           final String errMsg = jsonResponse['message'] ?? 'Location sync rejected by server';
           throw Exception(errMsg);
         }
+
         if (kDebugMode) {
-          print('✅ Location synced with RSA signature: ${location.latitude}, ${location.longitude}');
+          print('✅ [LocationService] Successfully synced ${cachedLocations.length} locations to backend.');
         }
+
+        // On success: clear cache to size=0
+        await employeeCachedLocationService.clearCachedLocations();
+
         final timeStr = DateFormat('hh:mm:ss a').format(DateTime.now());
         BackgroundLocationService.updateNotification(
           title: '📍 Location Tracking Active',
-          content: 'Last sync: $timeStr | Lat: ${location.latitude.toStringAsFixed(4)}, Lng: ${location.longitude.toStringAsFixed(4)}',
+          content: 'Last sync: $timeStr | Synced ${cachedLocations.length} locations | Lat: ${location.latitude.toStringAsFixed(4)}, Lng: ${location.longitude.toStringAsFixed(4)}',
         );
         onLocationSynced?.call();
       } else {
         throw Exception('Server error ${response.statusCode}: ${response.body}');
       }
     } catch (e) {
+      // On failure: array list in cache is NOT cleared, avoiding any data loss
       if (kDebugMode) {
-        print('❌ Location sync error: $e');
+        print('❌ [LocationService] Batch location sync failed (cache kept intact): $e');
       }
-    } finally {
     }
   }
+
   /// Manual sync - call from UI
   Future<void> syncLocationNow({EmployeeModel? employee}) async {
-    await _syncLocationToBackend(employee: employee ?? globals.currentEmployee);
+    await _recordAndSyncLocation(employee: employee ?? globals.currentEmployee);
   }
 }
 final locationService = LocationService();

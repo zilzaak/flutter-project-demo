@@ -57,8 +57,7 @@ public class DutyMonitoringService {
 
 
 
-
-    public ApiDTO syncEmployeeLocation(EmployeeDistanceRequestDTO request, String signature, String preferredUsername) {
+/*    public ApiDTO syncEmployeeLocation(EmployeeDistanceRequestDTO request, String signature, String preferredUsername) {
         try {
             UsersEnrollment usersEnrollment = usersEnrollmentRepository.findByEmployeeIdAndActive(request.getEmployeeId(),true);
             if (usersEnrollment == null) {
@@ -88,7 +87,57 @@ public class DutyMonitoringService {
         } catch (Exception e) {
             return ApiDTO.builder().status(false).message(e.getMessage()).build();
         }
+    }*/
+
+
+    public ApiDTO syncEmployeeLocation(List<EmployeeDistanceRequestDTO> requests, String employeeId) {
+        try {
+           UsersEnrollment usersEnrollment = usersEnrollmentRepository .findByEmployeeIdAndActive(employeeId, true);
+            if (usersEnrollment == null) {
+                return ApiDTO.builder().status(false).message("Employee enrollment not found.").build();
+            }
+            Double officeLongitude = usersEnrollment.getGeofance().getLongitude();
+            Double officeLatitude = usersEnrollment.getGeofance().getLatitude();
+            Double officeRadius = usersEnrollment.getGeofance().getRadius();
+            StringBuilder longitude = new StringBuilder();
+            StringBuilder latitude = new StringBuilder();
+            StringBuilder distanceFromOffice = new StringBuilder();
+            StringBuilder outsideOfOffice = new StringBuilder();
+
+            for (EmployeeDistanceRequestDTO location : requests) {
+                Double distance = commonService.distanceBetweenTwoLocation(officeLongitude, officeLatitude, location.getLongitude(), location.getLatitude());
+                if (longitude.length() > 0) {
+                    longitude.append(",");
+                    latitude.append(",");
+                    distanceFromOffice.append(",");
+                    outsideOfOffice.append(",");
+                }
+                longitude.append(location.getLongitude());
+                latitude.append(location.getLatitude());
+                distanceFromOffice.append(distance);
+                outsideOfOffice.append(distance > officeRadius ? "1" : "0");
+            }
+
+            Map<String, Object> result = employeeDistanceHistoryRepository.spEmployeeDistanceHistorySave(
+                                    null,
+                                    employeeId,
+                                    longitude.toString(),
+                                    latitude.toString(),
+                                    officeLongitude,
+                                    officeLatitude,
+                                    officeRadius,
+                                    distanceFromOffice.toString(),
+                                    outsideOfOffice.toString(),
+                                    employeeId,
+                                    "I");
+            boolean status = Integer.valueOf(result.get("out_message_code").toString()) == 0;
+            return ApiDTO.builder().status(status).message((String) result.get("out_message_description")).build();
+
+        } catch (Exception e) {
+            return ApiDTO.builder().status(false).message(e.getMessage()).build();
+        }
     }
+
 
 
     private boolean verifyRequestSignature(EmployeeDistanceRequestDTO request, String signature, String publicRsa) {

@@ -74,14 +74,12 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
     } else {
       emp2 = emp;
     }
-
     // Automatically refresh UI coordinates whenever LocationService performs a sync
     locationService.onLocationSynced = () {
       if (mounted) {
         setState(() {});
       }
     };
-
     locationService.startScheduledSync(emp2);
   }
 
@@ -120,6 +118,31 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
     } finally {
       // Graph failures must never hamper scheduled location sync
       if (_isTracking) {
+      }
+    }
+  }
+
+  Future<void> _fetchEmployeeInfo() async {
+    final emp = widget.employee;
+    try {
+      final data = await employeeApiService.fetchEmployeeInfo(
+        employeeId: emp!.userId.toString(),
+        date: DateTime.now().toString(),
+        accessToken: emp.token.toString(),
+      );
+
+      print('✅ EMPLOYEE INFO RECEIVED');
+
+      globals.currentEmployee = data;
+      globals.setAuthData(data.token.toString(), data);
+      authService.employee = data;          // now safe — authService is populated
+      locationService.startScheduledSync(data);
+
+      if (mounted) setState(() {});         // refresh UI
+    } catch (e) {
+      print('❌ _fetchEmployeeInfo ERROR: $e');
+      if (mounted) {
+        _showSnackBar('Refresh failed: $e', Colors.red);
       }
     }
   }
@@ -307,10 +330,21 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
         backgroundColor: Colors.indigo.shade700,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: _isLoadingGraph
+                ? const SizedBox(
+              width: 22,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+                : const Icon(Icons.refresh, size: 22, color: Colors.white),
+            tooltip: 'Refresh Profile',
+            onPressed:  _fetchEmployeeInfo,
+          ),
           // ⏰ Logout is intentionally disabled during a shift.
           // Session must remain alive for the full 8-hour continuous service window.
           // Token expiration is suppressed on the backend (Spring Boot SecurityConfig).
-          Tooltip(
+/*          Tooltip(
             message: 'Session is active (8-h service mode)',
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12.0),
@@ -319,7 +353,7 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
                 color: Colors.white.withOpacity(0.6),
               ),
             ),
-          ),
+          ),*/
         ],
       ),
       body: RefreshIndicator(
@@ -339,7 +373,7 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
 
               // Employment Info
               const Text(
-                'Employment Info',
+                'Employee Information',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),

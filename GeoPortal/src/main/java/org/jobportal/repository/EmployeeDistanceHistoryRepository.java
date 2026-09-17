@@ -17,13 +17,13 @@ public interface EmployeeDistanceHistoryRepository extends JpaRepository<Employe
     Map<String, Object> spEmployeeDistanceHistorySave(
             @Param("id") Long id,
             @Param("employee_id") String employeeId,
-            @Param("longitude") Double longitude,
-            @Param("latitude") Double latitude,
+            @Param("longitude") String longitude,
+            @Param("latitude") String latitude,
             @Param("office_longitude") Double officeLongitude,
             @Param("office_latitude") Double officeLatitude,
             @Param("office_radius") Double officeRadius,
-            @Param("distance_from_office") Double disTanceFromOffice,
-            @Param("outside_of_office") Boolean outsideOfOffice,
+            @Param("distance_from_office") String disTanceFromOffice,
+            @Param("outside_of_office") String outsideOfOffice,
             //@Param("date") LocalDate date,
             @Param("user") String user,
             @Param("operation") String operation

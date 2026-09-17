@@ -1,6 +1,9 @@
 package org.jobportal.controller;
 
 import lombok.RequiredArgsConstructor;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.jobportal.dto.ApiDTO;
 import org.jobportal.dto.EmployeeDistanceRequestDTO;
 import org.jobportal.dto.EnrollRequest;
@@ -13,6 +16,8 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.Collections;
+import java.util.List;
 
 
 @Controller
@@ -35,6 +40,7 @@ public class GeoLocationController {
 
 
 
+/*
     @PostMapping("/sync-employee-location")
     public ResponseEntity<ApiDTO> syncEmployeeLocation(
             @RequestBody EmployeeDistanceRequestDTO request,
@@ -48,6 +54,17 @@ public class GeoLocationController {
         ApiDTO response = employeeDutyMonitoringService.syncEmployeeLocation(request, signature, principal.getClaimAsString("preferred_username"));
         return new ResponseEntity<>(response, HttpStatus.OK);
     }
+*/
+
+
+    @PostMapping("/sync-employee-location")
+    public ResponseEntity<ApiDTO> syncEmployeeLocation(
+            @RequestBody List<EmployeeDistanceRequestDTO> request,
+            @AuthenticationPrincipal Jwt principal
+    ) {
+        ApiDTO response = employeeDutyMonitoringService.syncEmployeeLocation(request,principal.getClaimAsString("preferred_username"));
+        return new ResponseEntity<>(response, HttpStatus.OK);
+      }
 
 
     @GetMapping("/my-location-graph")
