@@ -1,51 +1,37 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Internet -->
-    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.INTERNET"/>
 
     <!-- Location (foreground + background for screen-off tracking) -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
 
     <!-- Foreground Service (required for screen-off background execution) -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
 
     <!-- Battery optimization exemption dialog -->
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
 
     <!-- Post a persistent notification (Android 13+) -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
-    <application
-        android:label="my_demo_project"
-        android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+    <application android:label="DGeo_Tracker" android:name="${applicationName}" android:icon="@mipmap/ic_launcher" android:usesCleartextTraffic="true">
 
         <!-- ================================================== -->
         <!-- MAIN FLUTTER ACTIVITY                             -->
         <!-- ================================================== -->
 
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:launchMode="singleTop"
-            android:theme="@style/LaunchTheme"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-            android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize">
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:theme="@style/LaunchTheme" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">
 
-            <meta-data
-                android:name="io.flutter.embedding.android.NormalTheme"
-                android:resource="@style/NormalTheme" />
+            <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme"/>
 
             <!-- Main launcher -->
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
         </activity>
@@ -55,23 +41,17 @@
         <!-- APPAUTH REDIRECT RECEIVER                         -->
         <!-- ================================================== -->
 
-        <activity
-            android:name="net.openid.appauth.RedirectUriReceiverActivity"
-            android:exported="true">
+        <activity android:name="net.openid.appauth.RedirectUriReceiverActivity" android:exported="true">
 
             <intent-filter>
 
-                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.VIEW"/>
 
-                <category
-                    android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.DEFAULT"/>
 
-                <category
-                    android:name="android.intent.category.BROWSABLE" />
+                <category android:name="android.intent.category.BROWSABLE"/>
 
-                <data
-                    android:scheme="com.example.mydemoproject"
-                    android:host="oauth2redirect" />
+                <data android:scheme="com.example.mydemoproject" android:host="oauth2redirect"/>
 
             </intent-filter>
 
@@ -82,14 +62,10 @@
         <!-- BACKGROUND LOCATION FOREGROUND SERVICE              -->
         <!-- Keeps Dart isolate alive when screen is off         -->
         <!-- ================================================== -->
-        <service
-            android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:foregroundServiceType="location" />
+        <service android:name="id.flutter.flutter_background_service.BackgroundService" android:foregroundServiceType="location"/>
 
         <!-- Flutter embedding -->
-        <meta-data
-            android:name="flutterEmbedding"
-            android:value="2" />
+        <meta-data android:name="flutterEmbedding" android:value="2"/>
 
     </application>
 
@@ -102,11 +78,9 @@
 
         <intent>
 
-            <action
-                android:name="android.intent.action.PROCESS_TEXT" />
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
 
-            <data
-                android:mimeType="text/plain" />
+            <data android:mimeType="text/plain"/>
 
         </intent>
 
