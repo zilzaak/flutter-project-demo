@@ -1,16 +1,26 @@
-
 import 'package:flutter/material.dart';
+import 'models/employee_model.dart';
+import 'screens/employee_details_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/background_location_service.dart';
+import 'services/cached_employee_checker.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await BackgroundLocationService.initialize();
-  runApp(const MyApp());
+
+  // Check for cached session before choosing root screen
+  EmployeeModel? cachedEmployee;
+  try {
+    cachedEmployee = await cachedEmployeeChecker.checkCachedEmployee();
+  } catch (_) {}
+
+  runApp(MyApp(initialEmployee: cachedEmployee));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final EmployeeModel? initialEmployee;
+  const MyApp({super.key, this.initialEmployee});
 
   @override
   Widget build(BuildContext context) {
@@ -21,8 +31,9 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.indigo,
         useMaterial3: true,
       ),
-      home: const LoginScreen(),
+      home: initialEmployee != null
+          ? EmployeeDetailsScreen(employee: initialEmployee)
+          : const LoginScreen(),
     );
   }
 }
-

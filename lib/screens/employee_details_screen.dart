@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -7,10 +8,8 @@ import '../global_config.dart';
 import '../models/employee_model.dart';
 import '../models/location_graph_model.dart';
 import '../services/auth_service.dart';
-import '../services/background_location_service.dart';
 import '../services/location_service.dart';
 import '../services/location_graph_service.dart';
-import 'login_screen.dart';
 
 
 class EmployeeDetailsScreen extends StatefulWidget {
@@ -19,10 +18,10 @@ class EmployeeDetailsScreen extends StatefulWidget {
   @override
   State<EmployeeDetailsScreen> createState() => _EmployeeDetailsScreenState();
 }
-class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
+class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> with WidgetsBindingObserver {
   final MapController _mapController = MapController();
   String? _locationError;
-  bool _isTracking = true;
+  final bool _isTracking = true;
 
   // Location Graph state & 5-minute scheduler
   Timer? _graphRefreshTimer;
@@ -36,19 +35,31 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _fetchLocationGraph();
     _startGraphScheduler();
     _initializeLocationTracking();
   }
 
-
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     locationService.onLocationSynced = null;
     _bgLocationSub?.cancel();
     _graphRefreshTimer?.cancel();
     _mapController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Screen turned on or user resumed the app from minimized state
+      _fetchLocationGraph(isBackground: true);
+      if (mounted) {
+        setState(() {});
+      }
+    }
   }
 
   /// Start 5-minute periodic scheduler for refreshing the location graph
@@ -61,9 +72,7 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
 
   void _initializeLocationTracking() {
     EmployeeModel? emp = widget.employee;
-    if (emp == null) {
-      emp = authService.employee;
-    }
+    emp ??= authService.employee;
     EmployeeModel? emp2;
     if (emp == null) {
       if (employeeApiService.employee != null) {
@@ -115,10 +124,6 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
         }
         _isLoadingGraph = false;
       });
-    } finally {
-      // Graph failures must never hamper scheduled location sync
-      if (_isTracking) {
-      }
     }
   }
 
@@ -131,7 +136,7 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
         accessToken: emp.token.toString(),
       );
 
-      print('✅ EMPLOYEE INFO RECEIVED');
+      if (kDebugMode) debugPrint('✅ EMPLOYEE INFO RECEIVED');
 
       globals.currentEmployee = data;
       globals.setAuthData(data.token.toString(), data);
@@ -140,7 +145,7 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
 
       if (mounted) setState(() {});         // refresh UI
     } catch (e) {
-      print('❌ _fetchEmployeeInfo ERROR: $e');
+      if (kDebugMode) debugPrint('❌ _fetchEmployeeInfo ERROR: $e');
       if (mounted) {
         _showSnackBar('Refresh failed: $e', Colors.red);
       }
@@ -171,17 +176,6 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen>  {
         ),
       );
     }
-  }
-
-  void _handleLogout() {
-    _bgLocationSub?.cancel();
-    _graphRefreshTimer?.cancel();
-    BackgroundLocationService.stopTracking();
-    authService.logout();
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
-    );
   }
 
   void _showSnackBar(String message, Color color) {

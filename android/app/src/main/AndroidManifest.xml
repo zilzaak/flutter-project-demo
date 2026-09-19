@@ -18,6 +18,10 @@
     <!-- Post a persistent notification (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
+    <!-- WakeLock to keep CPU awake during screen off for foreground service -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
     <application android:label="DGeo_Tracker" android:name="${applicationName}" android:icon="@mipmap/launcher_icon" android:usesCleartextTraffic="true">
 
         <!-- ================================================== -->
@@ -62,7 +66,10 @@
         <!-- BACKGROUND LOCATION FOREGROUND SERVICE              -->
         <!-- Keeps Dart isolate alive when screen is off         -->
         <!-- ================================================== -->
-        <service android:name="id.flutter.flutter_background_service.BackgroundService" android:foregroundServiceType="location"/>
+        <service
+            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:foregroundServiceType="location"
+            android:stopWithTask="false"/>
 
         <!-- Flutter embedding -->
         <meta-data android:name="flutterEmbedding" android:value="2"/>

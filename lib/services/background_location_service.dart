@@ -1,15 +1,32 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../global_config.dart';
 import '../models/employee_model.dart';
+import '../utility/CommonUtil.dart';
+import 'employee_cached_location_service.dart';
+import 'token_cache_service.dart';
 
 class BackgroundLocationService {
   static final BackgroundLocationService _instance = BackgroundLocationService._internal();
   factory BackgroundLocationService() => _instance;
   BackgroundLocationService._internal();
+
+  static const FlutterSecureStorage _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
+
+  static const String batteryPromptKey = 'battery_optimization_prompted';
+  static const String activeEmployeeKey = 'active_tracking_employee';
 
   /// Initializes the FlutterBackgroundService configuration at app startup.
   static Future<void> initialize() async {
@@ -44,8 +61,9 @@ class BackgroundLocationService {
     }
   }
 
-  /// Request essential permissions without blocking tracking startup.
-  static Future<void> requestPermissions() async {
+  /// Request essential permissions cleanly and non-redundantly.
+  /// Battery optimization prompt is shown ONLY once ever.
+  static Future<bool> ensurePermissions() async {
     try {
       // 1. Notification permission (Android 13+)
       final notifStatus = await Permission.notification.status;
@@ -53,41 +71,50 @@ class BackgroundLocationService {
         await Permission.notification.request();
       }
 
-      // 2. Location permissions
-      final locStatus = await Permission.location.status;
+      // 2. Location permission
+      var locStatus = await Permission.location.status;
       if (!locStatus.isGranted) {
-        await Permission.location.request();
+        locStatus = await Permission.location.request();
       }
 
-      // 3. Battery optimization exemption (SECONDARY PLAN: keeps CPU alive when screen is off)
-      final batteryStatus = await Permission.ignoreBatteryOptimizations.status;
-      if (!batteryStatus.isGranted) {
-        if (kDebugMode) {
-          print('🔋 Requesting battery optimization exemption...');
+      // 3. Battery optimization exemption - only prompt ONCE across entire app lifetime
+      final prompted = await _storage.read(key: batteryPromptKey);
+      if (prompted != 'true') {
+        final isIgnored = await Permission.ignoreBatteryOptimizations.isGranted;
+        if (!isIgnored) {
+          if (kDebugMode) {
+            print('🔋 Requesting battery optimization exemption (first-time only)...');
+          }
+          await Permission.ignoreBatteryOptimizations.request();
         }
-        await Permission.ignoreBatteryOptimizations.request();
+        await _storage.write(key: batteryPromptKey, value: 'true');
       }
+
+      return locStatus.isGranted;
     } catch (e) {
       if (kDebugMode) {
-        print('⚠️ [BackgroundLocationService] Error requesting permissions: $e');
+        print('⚠️ [BackgroundLocationService] Error ensuring permissions: $e');
       }
+      return false;
     }
   }
 
-  /// Starts the Android Foreground Service (WakeLock + Ongoing notification).
-  /// This prevents Android from suspending the app process when screen turns off.
+  /// Starts the Android Foreground Service (WakeLock + Ongoing notification + background loop).
+  /// Keeps tracking alive continuously even when the screen is off or app is minimized.
   static Future<void> startTracking(EmployeeModel? employee) async {
     if (employee == null) {
       return;
     }
 
     try {
-      // Request permissions asynchronously in background so tracking starts instantly
-      requestPermissions().catchError((e) {
-        if (kDebugMode) {
-          print('⚠️ [BackgroundLocationService] Permission request error: $e');
-        }
-      });
+      // Persist active employee info so background isolate has access across restarts
+      await _storage.write(
+        key: activeEmployeeKey,
+        value: jsonEncode(employee.toJson()),
+      );
+
+      // Ensure permissions without blocking or showing duplicate popups
+      await ensurePermissions();
 
       final service = FlutterBackgroundService();
       final isRunning = await service.isRunning();
@@ -98,6 +125,9 @@ class BackgroundLocationService {
           print('🚀 [BackgroundLocationService] Foreground service started: $started');
         }
       }
+
+      // Send employee data to the running background isolate
+      service.invoke('setEmployee', employee.toJson());
     } catch (e) {
       if (kDebugMode) {
         print('⚠️ [BackgroundLocationService] startTracking error: $e');
@@ -105,7 +135,17 @@ class BackgroundLocationService {
     }
   }
 
-  /// Updates the foreground notification text (called after each location sync).
+  /// Requests the background service to execute a location sync immediately.
+  static Future<void> syncNow() async {
+    try {
+      final service = FlutterBackgroundService();
+      if (await service.isRunning()) {
+        service.invoke('syncNow');
+      }
+    } catch (_) {}
+  }
+
+  /// Updates the foreground notification text.
   static Future<void> updateNotification({required String title, required String content}) async {
     try {
       final service = FlutterBackgroundService();
@@ -121,6 +161,7 @@ class BackgroundLocationService {
   /// Stops the background tracking foreground service.
   static Future<void> stopTracking() async {
     try {
+      await _storage.delete(key: activeEmployeeKey);
       final service = FlutterBackgroundService();
       if (await service.isRunning()) {
         service.invoke('stopService');
@@ -138,7 +179,8 @@ class BackgroundLocationService {
 
 // ============================================================================
 // BACKGROUND ISOLATE ENTRY POINT
-// Holds the Android Foreground Service notification and WakeLock alive.
+// Runs in a dedicated background isolate managed by Android Foreground Service.
+// Holds WakeLock, runs 1-minute tracking scheduler, caches & syncs to backend.
 // ============================================================================
 
 @pragma('vm:entry-point')
@@ -151,12 +193,197 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 void onBackgroundServiceStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
 
-  // Listen for stop request
-  service.on('stopService').listen((event) {
+  EmployeeModel? activeEmployee;
+  Timer? trackingTimer;
+  final CommonUtil commonUtil = CommonUtil();
+  final TokenCacheService tokenCache = TokenCacheService();
+  final EmployeeCachedLocationService cachedLocationService = EmployeeCachedLocationService();
+  const FlutterSecureStorage secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
+
+  if (service is AndroidServiceInstance) {
+    service.setForegroundNotificationInfo(
+      title: '📍 Location Tracking Active',
+      content: 'Initializing employee location tracking...',
+    );
+  }
+
+  // Load employee from persistent storage if available
+  Future<EmployeeModel?> loadStoredEmployee() async {
+    try {
+      final raw = await secureStorage.read(key: BackgroundLocationService.activeEmployeeKey);
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) {
+          return EmployeeModel.fromJson(decoded);
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Execute one tracking cycle: GPS retrieval -> buffer caching -> batch HTTP sync
+  Future<void> runTrackingTick() async {
+    try {
+      activeEmployee ??= await loadStoredEmployee();
+
+      // Check if office duty hours (8 hours) are completed
+      if (activeEmployee != null && commonUtil.isOfficeHourFinished(activeEmployee)) {
+        if (kDebugMode) {
+          print('⏹️ [BackgroundIsolate] Duty time completed (8 hours). Stopping service.');
+        }
+        if (service is AndroidServiceInstance) {
+          service.setForegroundNotificationInfo(
+            title: '📍 Duty Finished',
+            content: 'Today\'s 8-hour duty completed. Location tracking stopped.',
+          );
+        }
+        trackingTimer?.cancel();
+        service.stopSelf();
+        return;
+      }
+
+      // Verify GPS is on
+      final bool isGpsEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!isGpsEnabled) {
+        if (service is AndroidServiceInstance) {
+          service.setForegroundNotificationInfo(
+            title: '⚠️ Location Services Disabled',
+            content: 'Turn on GPS to resume continuous tracking',
+          );
+        }
+        return;
+      }
+
+      // Acquire position
+      Position? position;
+      try {
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 10),
+          ),
+        );
+      } catch (_) {
+        try {
+          position = await Geolocator.getLastKnownPosition();
+        } catch (_) {}
+      }
+
+      if (position == null) {
+        if (kDebugMode) {
+          print('⚠️ [BackgroundIsolate] Unable to get GPS coordinates on this tick.');
+        }
+        return;
+      }
+
+      // Resolve employee ID & token
+      final String empId = activeEmployee?.userId ?? '';
+      String? token = activeEmployee?.token;
+      if (token == null || token.isEmpty) {
+        token = await tokenCache.getTodayToken();
+      }
+
+      final locationEntry = {
+        'employeeId': empId,
+        'longitude': position.longitude,
+        'latitude': position.latitude,
+        'date': position.timestamp.toIso8601String(),
+        'accessToken': token,
+      };
+
+      // Store in persistent cache
+      await cachedLocationService.addLocation(locationEntry);
+      final List<Map<String, dynamic>> cachedLocations =
+          await cachedLocationService.getCachedLocations();
+      final int cacheCount = cachedLocations.length;
+      final timeStr = DateFormat('hh:mm:ss a').format(DateTime.now());
+
+      bool syncSuccess = false;
+
+      // Batch sync when cache count reaches 5 or multiple of 5 (5*n)
+      if (cacheCount > 0 && cacheCount % 5 == 0) {
+        if (kDebugMode) {
+          print('🚀 [BackgroundIsolate] Syncing batch of $cacheCount locations to backend...');
+        }
+        try {
+          final Uri syncUri = Uri.parse(
+              '${GlobalConfig.baseUrl}/api/geo/portal/geo-location/sync-employee-location');
+          final response = await http.post(
+            syncUri,
+            headers: {
+              'Content-Type': 'application/json',
+              if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode(cachedLocations),
+          ).timeout(const Duration(seconds: 15));
+
+          if (response.statusCode >= 200 && response.statusCode < 300) {
+            final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
+            if (jsonResponse['status'] != false) {
+              await cachedLocationService.clearCachedLocations();
+              syncSuccess = true;
+              if (kDebugMode) {
+                print('✅ [BackgroundIsolate] Batch sync succeeded: $cacheCount locations.');
+              }
+            }
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('❌ [BackgroundIsolate] Batch sync failed (cache preserved): $e');
+          }
+        }
+      }
+
+      // Update Foreground Service Notification
+      if (service is AndroidServiceInstance) {
+        final contentText = syncSuccess
+            ? 'Last sync: $timeStr | Synced $cacheCount pts | Lat: ${position.latitude.toStringAsFixed(4)}, Lng: ${position.longitude.toStringAsFixed(4)}'
+            : 'Recorded: $timeStr | Cached: $cacheCount pts (next at ${((cacheCount ~/ 5) + 1) * 5}) | Lat: ${position.latitude.toStringAsFixed(4)}, Lng: ${position.longitude.toStringAsFixed(4)}';
+
+        service.setForegroundNotificationInfo(
+          title: '📍 Location Tracking Active',
+          content: contentText,
+        );
+      }
+
+      // Emit event to UI isolate (if app is in foreground)
+      service.invoke('locationUpdated', {
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+        'accuracy': position.accuracy,
+        'timestamp': position.timestamp.toIso8601String(),
+        'cacheCount': syncSuccess ? 0 : cacheCount,
+        'synced': syncSuccess,
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ [BackgroundIsolate] runTrackingTick error: $e');
+      }
+    }
+  }
+
+  // Event Listeners
+  service.on('setEmployee').listen((data) {
+    if (data != null) {
+      activeEmployee = EmployeeModel.fromJson(data);
+      if (kDebugMode) {
+        print('👤 [BackgroundIsolate] Active employee updated: ${activeEmployee?.name}');
+      }
+    }
+  });
+
+  service.on('syncNow').listen((_) {
+    runTrackingTick();
+  });
+
+  service.on('stopService').listen((_) {
+    trackingTimer?.cancel();
     service.stopSelf();
   });
 
-  // Listen for notification updates from LocationService
   service.on('updateNotification').listen((data) {
     if (service is AndroidServiceInstance && data != null) {
       service.setForegroundNotificationInfo(
@@ -166,10 +393,11 @@ void onBackgroundServiceStart(ServiceInstance service) async {
     }
   });
 
-  if (service is AndroidServiceInstance) {
-    service.setForegroundNotificationInfo(
-      title: '📍 Location Tracking Active',
-      content: 'Syncing employee location every 1 minute',
-    );
-  }
+  // Start continuous 1-minute scheduler directly in this background service isolate
+  trackingTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+    runTrackingTick();
+  });
+
+  // Run immediately on service start
+  runTrackingTick();
 }
