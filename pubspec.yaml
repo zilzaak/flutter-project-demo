@@ -14,8 +14,6 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-# In Windows, build-name is used as the major, minor, and patch parts
-# of the product and file versions while build-number is used as the build suffix.
 version: 1.0.0+1
 
 environment:
@@ -60,14 +58,23 @@ dev_dependencies:
   rename_app: ^1.6.0
 
 
-lutter_launcher_icons:
-    android: "launcher_icon"  # This will be the new icon name
-    ios: false                # You said Android only, so we set this to false
-    image_path: "assets/icon/app_icon.png" # 👈 CHANGE THIS to your image's path
-    min_sdk_android: 21
-    # Optional: For a nicer look on modern Android phones (Android 8+)
-    adaptive_icon_background: "#FFFFFF" # Or a color code like "#007AFF"
-    adaptive_icon_foreground: "assets/icon/app_icon_foreground.png" # S
+# ============================================================
+# flutter_launcher_icons configuration
+#
+# Fixes applied:
+#   1. Corrected key: `flutter_launcher_icons` (was `lutter_launcher_icons`)
+#   2. Corrected image_path: .jpg (was .png, file doesn't exist as png)
+#   3. Removed adaptive_icon_foreground (file doesn't exist)
+#      — uncomment ONLY if you create assets/icon/app_icon_foreground.png
+# ============================================================
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: false
+  image_path: "assets/icon/app_icon.jpg"
+  min_sdk_android: 21
+  adaptive_icon_background: "#FFFFFF"
+  # adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"  # ← uncomment after creating this file
+
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -79,9 +86,10 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
   assets:
     - lib/diu-logo.png
-    - assets/icon/app_icon.png
+    - assets/icon/app_icon.jpg
 
   # To add assets to your application, add an assets section, like this:
   # assets:
