@@ -54,8 +54,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   /// Listen for real-time location service changes (e.g. quick settings toggle)
   void _initLocationListener() {
     try {
-      _locationServiceSubscription =
-          Geolocator.getServiceStatusStream().listen((status) {
+      _locationServiceSubscription = Geolocator.getServiceStatusStream().listen((status) {
         final isEnabled = status == ServiceStatus.enabled;
         if (!mounted) return;
         setState(() {

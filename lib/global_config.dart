@@ -13,7 +13,7 @@ class GlobalConfig {
   */
 
   //local configuration
-  static const String baseUrl = 'http://192.168.90.9:6005';
+  static const String baseUrl = 'http://192.168.0.101:6005';  //'http://192.168.90.9:6005';
   static const String keycloakBaseUrl = 'https://auth0.diu.edu.bd';
   static const String realm = 'demo';
   static const String clientId = 'ess-portal-ui';
