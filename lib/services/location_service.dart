@@ -187,7 +187,7 @@ class LocationService {
       }
 
       // Condition: array list size is 5 or product of 5 (5*n, where n=1,2,3...)
-      if (cacheCount > 0 && cacheCount % 5 == 0) {
+      if (cacheCount > 0 && cacheCount % 2 == 0) {
         if (kDebugMode) {
           print('🚀 [LocationService] Cache count ($cacheCount) reached multiple of 5. Syncing to backend...');
         }
