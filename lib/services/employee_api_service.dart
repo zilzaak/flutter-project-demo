@@ -9,7 +9,7 @@ import 'security_service.dart';
 class EmployeeApiService {
 
   static const String baseUrl = GlobalConfig.baseUrl;
-  static const String employeeInfoEndpoint = '/api/geoportal/geo-location/enroll-user';
+  static const String employeeInfoEndpoint = '/api/geo/portal/geo-location/enroll-user';
   EmployeeModel? employee;
 
   /// Fetch employee basic info from Spring Boot API and enroll device with RSA Key Pair

@@ -7,7 +7,7 @@ import 'security_service.dart';
 
 class LocationGraphService {
 
-  static const String endpoint = '/api/geoportal/geo-location/my-location-graph';
+  static const String endpoint = '/api/geo/portal/geo-location/my-location-graph';
 
   /// Fetch today's logged-in employee location graph from Spring Boot API
   static Future<LocationGraphData> fetchMyLocationGraph({String? token, String? employeeId}) async {

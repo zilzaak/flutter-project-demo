@@ -13,7 +13,7 @@ import 'employee_cached_location_service.dart';
 
 class LocationService {
   static const String baseUrl = GlobalConfig.baseUrl;
-  static const String syncEndpoint = '/api/geoportal/geo-location/sync-employee-location';
+  static const String syncEndpoint = '/api/geo/portal/geo-location/sync-employee-location';
   static const int syncIntervalMinutes = 1;
   LocationDataModel? currentLocation;
   VoidCallback? onLocationSynced;
