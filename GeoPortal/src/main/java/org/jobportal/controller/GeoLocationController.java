@@ -21,7 +21,7 @@ import java.util.List;
 
 
 @Controller
-@RequestMapping("/api/geoportal/geo-location")
+@RequestMapping("/api/geo/portal/geo-location")
 @RequiredArgsConstructor
 public class GeoLocationController {
 
