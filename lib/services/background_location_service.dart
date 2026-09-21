@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:my_demo_project/services/employee_api_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../global_config.dart';
@@ -179,6 +180,7 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 void onBackgroundServiceStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
   EmployeeModel? activeEmployee;
+  DateTime? _employeeLoadedForDate;
   Timer? trackingTimer;
   final CommonUtil commonUtil = CommonUtil();
   final TokenCacheService tokenCache = TokenCacheService();
@@ -207,6 +209,58 @@ void onBackgroundServiceStart(ServiceInstance service) async {
       }
     } catch (_) {}
     return null;
+  }
+
+  /// Refresh activeEmployee when the calendar day has changed since it was
+  /// last loaded. This runs before the duty-finished guard, so a new day
+  /// automatically re-fetches today's startTime / endTime / weekend / holiday
+  /// / firstPunch without needing the UI to be open.
+  Future<void> ensureEmployeeForToday() async {
+    final today = DateTime.now();
+
+    final isSameDay = _employeeLoadedForDate != null &&
+        _employeeLoadedForDate!.year  == today.year &&
+        _employeeLoadedForDate!.month == today.month &&
+        _employeeLoadedForDate!.day   == today.day;
+
+    if (isSameDay && activeEmployee != null) return;
+
+    final empId = activeEmployee?.userId ?? '';
+    if (empId.isEmpty) return;
+
+    String? token = activeEmployee?.token;
+    if (token == null || token.isEmpty) {
+      token = await tokenCache.getToken();
+    }
+    if (token == null || token.isEmpty) return;
+
+    try {
+      final fresh = await employeeApiService.fetchEmployeeInfo(
+        employeeId:  empId,
+        date:        today.toIso8601String().split('T').first,
+        accessToken: token,
+      );
+
+      activeEmployee          = fresh.copyWith(token: token);
+      _employeeLoadedForDate  = today;
+
+      await secureStorage.write(
+        key:   BackgroundLocationService.activeEmployeeKey,
+        value: jsonEncode(activeEmployee!.toJson()),
+      );
+
+      if (kDebugMode) {
+        print('🆕 [BackgroundIsolate] New-day refresh: '
+            'start=${fresh.startTime}, end=${fresh.endTime}, '
+            'weekend=${fresh.weekend}, holiday=${fresh.holiday}, '
+            'firstPunch=${fresh.firstPunch}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ [BackgroundIsolate] New-day refresh failed: $e');
+      }
+      // leave _employeeLoadedForDate unchanged so the next tick retries
+    }
   }
 
   /// Merges attendance fields returned by /sync-employee-location
@@ -244,6 +298,7 @@ void onBackgroundServiceStart(ServiceInstance service) async {
   Future<void> runTrackingTick() async {
     try {
       activeEmployee ??= await loadStoredEmployee();
+      await ensureEmployeeForToday();
       if (activeEmployee != null && (
           commonUtil.isOfficeHourFinished(activeEmployee) ||
           activeEmployee?.holiday.toString()=='true' ||
@@ -257,8 +312,8 @@ void onBackgroundServiceStart(ServiceInstance service) async {
             content: 'Today\'s 8-hour duty completed. Location tracking stopped.',
           );
         }
-        trackingTimer?.cancel();
-        service.stopSelf();
+/*        trackingTimer?.cancel();
+        service.stopSelf();*/
         return;
       }
       // Verify GPS is on
@@ -387,6 +442,7 @@ void onBackgroundServiceStart(ServiceInstance service) async {
   service.on('setEmployee').listen((data) {
     if (data != null) {
       activeEmployee = EmployeeModel.fromJson(data);
+      _employeeLoadedForDate = DateTime.now();
       if (kDebugMode) {
         print('👤 [BackgroundIsolate] Active employee updated: ${activeEmployee?.name}');
       }
