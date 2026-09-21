@@ -67,7 +67,7 @@ class EmployeeApiService {
         employeeData['employeeId'] = employeeData['employeeId'] ?? employeeData['employee_id'] ?? employeeId;
         employeeData['token'] = accessToken;
         employee = EmployeeModel.fromJson(employeeData);
-        return EmployeeModel.fromJson(employeeData);
+        return employee!;
       } else {
         throw Exception('Failed to fetch employee info: ${response.statusCode} - ${response.body}');
       }

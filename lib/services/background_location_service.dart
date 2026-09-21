@@ -105,28 +105,18 @@ class BackgroundLocationService {
     if (employee == null) {
       return;
     }
-
     try {
       // Persist active employee info so background isolate has access across restarts
       await _storage.write(
         key: activeEmployeeKey,
         value: jsonEncode(employee.toJson()),
       );
-
-      // Ensure permissions without blocking or showing duplicate popups
       await ensurePermissions();
-
       final service = FlutterBackgroundService();
       final isRunning = await service.isRunning();
-
       if (!isRunning) {
-        final started = await service.startService();
-        if (kDebugMode) {
-          print('🚀 [BackgroundLocationService] Foreground service started: $started');
-        }
+        await service.startService();
       }
-
-      // Send employee data to the running background isolate
       service.invoke('setEmployee', employee.toJson());
     } catch (e) {
       if (kDebugMode) {
@@ -192,7 +182,6 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 @pragma('vm:entry-point')
 void onBackgroundServiceStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
-
   EmployeeModel? activeEmployee;
   Timer? trackingTimer;
   final CommonUtil commonUtil = CommonUtil();
@@ -228,8 +217,6 @@ void onBackgroundServiceStart(ServiceInstance service) async {
   Future<void> runTrackingTick() async {
     try {
       activeEmployee ??= await loadStoredEmployee();
-
-      // Check if office duty hours (8 hours) are completed
       if (activeEmployee != null && commonUtil.isOfficeHourFinished(activeEmployee)) {
         if (kDebugMode) {
           print('⏹️ [BackgroundIsolate] Duty time completed (8 hours). Stopping service.');
@@ -244,7 +231,6 @@ void onBackgroundServiceStart(ServiceInstance service) async {
         service.stopSelf();
         return;
       }
-
       // Verify GPS is on
       final bool isGpsEnabled = await Geolocator.isLocationServiceEnabled();
       if (!isGpsEnabled) {
@@ -256,7 +242,6 @@ void onBackgroundServiceStart(ServiceInstance service) async {
         }
         return;
       }
-
       // Acquire position
       Position? position;
       try {
@@ -304,7 +289,7 @@ void onBackgroundServiceStart(ServiceInstance service) async {
       bool syncSuccess = false;
 
       // Batch sync when cache count reaches 5 or multiple of 5 (5*n)
-      if (cacheCount > 0) {
+      if (cacheCount > 0 && cacheCount%4==0) {
         if (kDebugMode) {
           print('🚀 [BackgroundIsolate] Syncing batch of $cacheCount locations to backend...');
         }
@@ -394,7 +379,7 @@ void onBackgroundServiceStart(ServiceInstance service) async {
   });
 
   // Start continuous 1-minute scheduler directly in this background service isolate
-  trackingTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+  trackingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
     runTrackingTick();
   });
 

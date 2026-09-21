@@ -49,36 +49,24 @@ class AuthService {
         debugPrint('Email      : ${claims['email'] ?? ''}');
       }
 
-      final employee = await employeeApiService.fetchEmployeeInfo(
+      this.employee= await employeeApiService.fetchEmployeeInfo(
         employeeId: employeeId,
         date: DateTime.now().toIso8601String().split('T').first,
         accessToken: accessToken,
       );
 
-      // Build employee object with the fresh token embedded.
-      final employeeWithToken = EmployeeModel(
-        userId: employee.userId,
-        name: employee.name,
-        designation: employee.designation,
-        department: employee.department,
-        joiningDate: employee.joiningDate,
-        startTime: employee.startTime,
-        endTime: employee.endTime,
-        firstPunch: employee.firstPunch,
-        token: accessToken,   // ← token field always reflects the fresh token
-      );
-
-      globals.setAuthData(accessToken, employeeWithToken);
+      globals.setAuthData(accessToken, employee!);
 
       if (kDebugMode) {
         debugPrint('==============================================');
         debugPrint('SSO LOGIN COMPLETE');
-        debugPrint('Employee : ${employeeWithToken.name} (${employeeWithToken.userId})');
+        debugPrint('Employee : ${employee?.name} (${employee?.userId})');
+        debugPrint('weekend : ${employee?.weekend} (${employee?.holiday})');
         debugPrint('Token cached under today key in key store.');
         debugPrint('==============================================');
       }
-      this.employee = employeeWithToken;
-      return employeeWithToken;
+
+      return this.employee!;
     } on FlutterAppAuthUserCancelledException {
       throw Exception('SSO login was cancelled.');
     } on FlutterAppAuthPlatformException catch (e) {

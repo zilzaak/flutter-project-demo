@@ -10,6 +10,8 @@ class EmployeeModel {
   final String endTime;
   final String? token;
   final String firstPunch;
+  final String? weekend;
+  final String? holiday;
 
   const EmployeeModel({
     required this.userId,
@@ -21,6 +23,8 @@ class EmployeeModel {
     required this.endTime,
     this.token,
     required this.firstPunch,
+     this.weekend,
+     this.holiday,
   });
 
   /// Factory method to create an EmployeeModel from API JSON response
@@ -35,6 +39,8 @@ class EmployeeModel {
       endTime: json['endTime'] ?? '8:10 AM - 4:00 PM',
       token: token ?? json['token'] ?? json['access_token'],
       firstPunch: json['firstPunch']?.toString() ?? '',
+      weekend: json['weekend']?.toString() ?? '',
+      holiday: json['holiday']?.toString() ?? '',
     );
   }
 
@@ -50,6 +56,8 @@ class EmployeeModel {
       'endTime': endTime,
       'token': token,
       'firstPunch': firstPunch,
+      'weekend': weekend,
+      'holiday': holiday,
     };
   }
 
