@@ -8,21 +8,10 @@ import '../services/employee_api_service.dart';
 import '../services/token_cache_service.dart';
 
 class CachedEmployeeChecker {
-  /// Checks for an existing cached JWT.
-  ///
-  /// If a token exists:
-  ///   - extracts employee ID from JWT
-  ///   - fetches employee information from backend
-  ///   - stores authentication data in globals
-  ///   - returns EmployeeModel
-  ///
-  /// If no token exists:
-  ///   - returns null
-  ///
-  /// No login/SSO operation is performed here.
+
   Future<EmployeeModel?> checkCachedEmployee() async {
     try {
-      final String? accessToken = await tokenCacheService.getTodayToken();
+      final String? accessToken = await tokenCacheService.getToken();
       if (accessToken == null || accessToken.isEmpty) {
         if (kDebugMode) {
           debugPrint(

@@ -28,7 +28,6 @@ class BackgroundLocationService {
   static const String batteryPromptKey = 'battery_optimization_prompted';
   static const String activeEmployeeKey = 'active_tracking_employee';
 
-  /// Initializes the FlutterBackgroundService configuration at app startup.
   static Future<void> initialize() async {
     try {
       final service = FlutterBackgroundService();
@@ -50,7 +49,6 @@ class BackgroundLocationService {
           onBackground: onIosBackground,
         ),
       );
-
       if (kDebugMode) {
         print('🚀 [BackgroundLocationService] Service configured successfully.');
       }
@@ -70,7 +68,6 @@ class BackgroundLocationService {
       if (!notifStatus.isGranted) {
         await Permission.notification.request();
       }
-
       // 2. Location permission
       var locStatus = await Permission.location.status;
       if (!locStatus.isGranted) {
@@ -89,7 +86,6 @@ class BackgroundLocationService {
         }
         await _storage.write(key: batteryPromptKey, value: 'true');
       }
-
       return locStatus.isGranted;
     } catch (e) {
       if (kDebugMode) {
@@ -213,11 +209,45 @@ void onBackgroundServiceStart(ServiceInstance service) async {
     return null;
   }
 
+  /// Merges attendance fields returned by /sync-employee-location
+  /// into the currently active employee, then persists the result.
+  Future<void> applyAttendanceUpdate(Map<String, dynamic> updated) async {
+    if (activeEmployee == null) return;
+    String boolToString(dynamic v) {
+      if (v == null) return 'false';
+      if (v is bool) return v.toString();
+      if (v is num)  return v == 0 ? 'false' : 'true';
+      final s = v.toString().trim().toLowerCase();
+      return (s == 'true' || s == '1' || s == 'yes') ? 'true' : 'false';
+    }
+    final patched = activeEmployee!.copyWith(
+      startTime:  updated['startTime']?.toString(),
+      endTime:    updated['endTime']?.toString(),
+      firstPunch: updated['firstPunch']?.toString(),
+      weekend:    updated.containsKey('weekend') ? boolToString(updated['weekend']) : null,
+      holiday:    updated.containsKey('holiday') ? boolToString(updated['holiday']) : null,
+    );
+    activeEmployee = patched;
+    await secureStorage.write(
+      key:   BackgroundLocationService.activeEmployeeKey,
+      value: jsonEncode(patched.toJson()),
+    );
+    if (kDebugMode) {
+      print('🔄 [BackgroundIsolate] Employee attendance updated: '
+          'weekend=${patched.weekend}, holiday=${patched.holiday}, '
+          'start=${patched.startTime}, end=${patched.endTime}, '
+          'firstPunch=${patched.firstPunch}');
+    }
+  }
+
   // Execute one tracking cycle: GPS retrieval -> buffer caching -> batch HTTP sync
   Future<void> runTrackingTick() async {
     try {
       activeEmployee ??= await loadStoredEmployee();
-      if (activeEmployee != null && commonUtil.isOfficeHourFinished(activeEmployee)) {
+      if (activeEmployee != null && (
+          commonUtil.isOfficeHourFinished(activeEmployee) ||
+          activeEmployee?.holiday.toString()=='true' ||
+          activeEmployee?.weekend.toString()=='true' ) ) {
         if (kDebugMode) {
           print('⏹️ [BackgroundIsolate] Duty time completed (8 hours). Stopping service.');
         }
@@ -268,7 +298,7 @@ void onBackgroundServiceStart(ServiceInstance service) async {
       final String empId = activeEmployee?.userId ?? '';
       String? token = activeEmployee?.token;
       if (token == null || token.isEmpty) {
-        token = await tokenCache.getTodayToken();
+        token = await tokenCache.getToken();
       }
 
       final locationEntry = {
@@ -281,8 +311,7 @@ void onBackgroundServiceStart(ServiceInstance service) async {
 
       // Store in persistent cache
       await cachedLocationService.addLocation(locationEntry);
-      final List<Map<String, dynamic>> cachedLocations =
-          await cachedLocationService.getCachedLocations();
+      final List<Map<String, dynamic>> cachedLocations = await cachedLocationService.getCachedLocations();
       final int cacheCount = cachedLocations.length;
       final timeStr = DateFormat('hh:mm:ss a').format(DateTime.now());
 
@@ -309,6 +338,10 @@ void onBackgroundServiceStart(ServiceInstance service) async {
             final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
             if (jsonResponse['status'] != false) {
               await cachedLocationService.clearCachedLocations();
+              final dynamic data = jsonResponse['data'];
+              if (data is Map<String, dynamic>) {
+                await applyAttendanceUpdate(data);
+              }
               syncSuccess = true;
               if (kDebugMode) {
                 print('✅ [BackgroundIsolate] Batch sync succeeded: $cacheCount locations.');

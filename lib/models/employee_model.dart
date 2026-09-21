@@ -92,4 +92,34 @@ class EmployeeModel {
     }
   }
 
+  /// Returns a copy of this employee with the given fields replaced.
+  /// Passing `null` (or omitting) keeps the current value.
+  EmployeeModel copyWith({
+    String? userId,
+    String? name,
+    String? designation,
+    String? department,
+    String? joiningDate,
+    String? startTime,
+    String? endTime,
+    String? token,
+    String? firstPunch,
+    String? weekend,
+    String? holiday,
+  }) {
+    return EmployeeModel(
+      userId:      userId      ?? this.userId,
+      name:        name        ?? this.name,
+      designation: designation ?? this.designation,
+      department:  department  ?? this.department,
+      joiningDate: joiningDate ?? this.joiningDate,
+      startTime:   startTime   ?? this.startTime,
+      endTime:     endTime     ?? this.endTime,
+      token:       token       ?? this.token,
+      firstPunch:  firstPunch  ?? this.firstPunch,
+      weekend:     weekend     ?? this.weekend,
+      holiday:     holiday     ?? this.holiday,
+    );
+  }
+
 }

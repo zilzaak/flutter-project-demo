@@ -127,6 +127,7 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> with Widg
     }
   }
 
+
   Future<void> _fetchEmployeeInfo() async {
     final emp = widget.employee;
     try {
@@ -135,12 +136,11 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> with Widg
         date: DateTime.now().toString(),
         accessToken: emp.token.toString(),
       );
-
       if (kDebugMode) debugPrint('✅ EMPLOYEE INFO RECEIVED');
-
       globals.currentEmployee = data;
       globals.setAuthData(data.token.toString(), data);
       authService.employee = data;          // now safe — authService is populated
+      locationService.stopScheduledSync();
       locationService.startScheduledSync(data);
 
       if (mounted) setState(() {});         // refresh UI
