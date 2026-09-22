@@ -42,11 +42,11 @@ class CachedEmployeeChecker {
         );
       }
 
-      final EmployeeModel employee = await employeeApiService.fetchEmployeeInfo(
+       EmployeeModel employee = await employeeApiService.fetchEmployeeInfo(
         employeeId: employeeId,date: DateTime.now().toIso8601String().split('T').first,
         accessToken: accessToken,);
 
-      final EmployeeModel employeeWithToken = EmployeeModel(
+       EmployeeModel employeeWithToken = EmployeeModel(
         userId: employee.userId,
         name: employee.name,
         designation: employee.designation,
@@ -54,8 +54,10 @@ class CachedEmployeeChecker {
         joiningDate: employee.joiningDate,
         startTime: employee.startTime,
         endTime: employee.endTime,
+         token: accessToken,
         firstPunch: employee.firstPunch,
-        token: accessToken,
+        weekend: employee.weekend,
+        holiday: employee.holiday,
       );
 
       globals.setAuthData(accessToken,employeeWithToken,);

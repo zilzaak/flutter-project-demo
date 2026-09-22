@@ -33,7 +33,6 @@ class GlobalConfig {
   void setAuthData(String token, EmployeeModel employee) {
     accessToken = token;
     currentEmployee = employee;
-
     if (kDebugMode) {
       print('✅ Auth data set globally');
       print('   Token: ${token.substring(0, 20)}...');

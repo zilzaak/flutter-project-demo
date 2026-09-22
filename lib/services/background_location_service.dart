@@ -122,6 +122,42 @@ class BackgroundLocationService {
     }
   }
 
+  /// Pushes a fresh employee to the running isolate without stopping it.
+  ///
+  /// If the service is already running, only `setEmployee` fires — the 30s
+  /// timer keeps ticking and no second timer is created.
+  /// If the service is not running, it is started first.
+  ///
+  /// Safe to call any time, from any screen, repeatedly.
+  static Future<void> updateActiveEmployee(EmployeeModel employee) async {
+    try {
+      // Persist first so a cold restart still sees fresh data.
+      await _storage.write(
+        key: activeEmployeeKey,
+        value: jsonEncode(employee.toJson()),
+      );
+
+      final service = FlutterBackgroundService();
+      if (await service.isRunning()) {
+        // Push data only — do NOT call startService again.
+        service.invoke('setEmployee', employee.toJson());
+      } else {
+        // Cold path — first login or service was stopped.
+        await ensurePermissions();
+        await service.startService();
+        service.invoke('setEmployee', employee.toJson());
+      }
+
+      if (kDebugMode) {
+        print('🔄 [BackgroundLocationService] Active employee pushed to isolate.');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ [BackgroundLocationService] updateActiveEmployee error: $e');
+      }
+    }
+  }
+
   /// Requests the background service to execute a location sync immediately.
   static Future<void> syncNow() async {
     try {
@@ -217,30 +253,30 @@ void onBackgroundServiceStart(ServiceInstance service) async {
   /// / firstPunch without needing the UI to be open.
   Future<void> ensureEmployeeForToday() async {
     final today = DateTime.now();
-
     final isSameDay = _employeeLoadedForDate != null &&
         _employeeLoadedForDate!.year  == today.year &&
         _employeeLoadedForDate!.month == today.month &&
         _employeeLoadedForDate!.day   == today.day;
 
-    if (isSameDay && activeEmployee != null) return;
-
-    final empId = activeEmployee?.userId ?? '';
-    if (empId.isEmpty) return;
-
-    String? token = activeEmployee?.token;
-    if (token == null || token.isEmpty) {
-      token = await tokenCache.getToken();
+    if (kDebugMode) {
+      print('🔄 ensureEmployeeForToday value of is same day is : '
+          '${isSameDay},');
     }
-    if (token == null || token.isEmpty) return;
+    if (isSameDay) return;
+    final empId = activeEmployee?.userId ?? '';
+    String? token = activeEmployee?.token;
+
+    if (kDebugMode) {
+      print(' ensureEmployeeForToday value of is employe id is: '
+          'weekend=${empId},');
+    }
 
     try {
       final fresh = await employeeApiService.fetchEmployeeInfo(
         employeeId:  empId,
         date:        today.toIso8601String().split('T').first,
-        accessToken: token,
+        accessToken: token.toString(),
       );
-
       activeEmployee          = fresh.copyWith(token: token);
       _employeeLoadedForDate  = today;
 
@@ -250,14 +286,20 @@ void onBackgroundServiceStart(ServiceInstance service) async {
       );
 
       if (kDebugMode) {
-        print('🆕 [BackgroundIsolate] New-day refresh: '
+        print('🆕 [ensureEmployeeForToday] fetched new employee is fresh: '
             'start=${fresh.startTime}, end=${fresh.endTime}, '
             'weekend=${fresh.weekend}, holiday=${fresh.holiday}, '
             'firstPunch=${fresh.firstPunch}');
       }
+      if (kDebugMode) {
+        print('🆕 [ensureEmployeeForToday] fetched new employee is active employee: '
+            'start=${activeEmployee?.startTime}, end=${activeEmployee?.endTime}, '
+            'weekend=${activeEmployee?.weekend}, holiday=${activeEmployee?.holiday}, '
+            'firstPunch=${activeEmployee?.firstPunch}');
+      }
     } catch (e) {
       if (kDebugMode) {
-        print('⚠️ [BackgroundIsolate] New-day refresh failed: $e');
+        print('⚠️ [ensureEmployeeForToday] New-day refresh failed: $e');
       }
       // leave _employeeLoadedForDate unchanged so the next tick retries
     }
@@ -274,6 +316,13 @@ void onBackgroundServiceStart(ServiceInstance service) async {
       final s = v.toString().trim().toLowerCase();
       return (s == 'true' || s == '1' || s == 'yes') ? 'true' : 'false';
     }
+    if (kDebugMode) {
+      print('🔄 before update active is: '
+          'weekend=${activeEmployee?.weekend}, holiday=${activeEmployee?.holiday}, '
+          'start=${activeEmployee?.startTime}, end=${activeEmployee?.endTime}, '
+          'firstPunch=${activeEmployee?.firstPunch}');
+    }
+
     final patched = activeEmployee!.copyWith(
       startTime:  updated['startTime']?.toString(),
       endTime:    updated['endTime']?.toString(),
@@ -281,16 +330,23 @@ void onBackgroundServiceStart(ServiceInstance service) async {
       weekend:    updated.containsKey('weekend') ? boolToString(updated['weekend']) : null,
       holiday:    updated.containsKey('holiday') ? boolToString(updated['holiday']) : null,
     );
+
     activeEmployee = patched;
     await secureStorage.write(
       key:   BackgroundLocationService.activeEmployeeKey,
       value: jsonEncode(patched.toJson()),
     );
     if (kDebugMode) {
-      print('🔄 [BackgroundIsolate] Employee attendance updated: '
+      print('🔄 after update active employee is patched: '
           'weekend=${patched.weekend}, holiday=${patched.holiday}, '
           'start=${patched.startTime}, end=${patched.endTime}, '
           'firstPunch=${patched.firstPunch}');
+    }
+    if (kDebugMode) {
+      print('🔄 after update active employee is activeEmployee: '
+          'weekend=${activeEmployee?.weekend}, holiday=${activeEmployee?.holiday}, '
+          'start=${activeEmployee?.startTime}, end=${activeEmployee?.endTime}, '
+          'firstPunch=${activeEmployee?.firstPunch}');
     }
   }
 
@@ -298,8 +354,15 @@ void onBackgroundServiceStart(ServiceInstance service) async {
   Future<void> runTrackingTick() async {
     try {
       activeEmployee ??= await loadStoredEmployee();
+
+      if (kDebugMode) {
+        print('🆕 [runTrackingTick] activeEmployee from stored is : '
+            'start=${activeEmployee?.startTime}, end=${activeEmployee?.endTime}, '
+            'weekend=${activeEmployee?.weekend}, holiday=${activeEmployee?.holiday}, '
+            'firstPunch=${activeEmployee?.firstPunch}');
+      }
       await ensureEmployeeForToday();
-      if (activeEmployee != null && (
+     if (activeEmployee != null && (
           commonUtil.isOfficeHourFinished(activeEmployee) ||
           activeEmployee?.holiday.toString()=='true' ||
           activeEmployee?.weekend.toString()=='true' ) ) {
@@ -373,7 +436,7 @@ void onBackgroundServiceStart(ServiceInstance service) async {
       bool syncSuccess = false;
 
       // Batch sync when cache count reaches 5 or multiple of 5 (5*n)
-      if (cacheCount > 0 && cacheCount%1==0) {
+      if (cacheCount > 0 && cacheCount%4==0) {
         if (kDebugMode) {
           print('🚀 [BackgroundIsolate] Syncing batch of $cacheCount locations to backend...');
         }
@@ -468,7 +531,7 @@ void onBackgroundServiceStart(ServiceInstance service) async {
   });
 
   // Start continuous 1-minute scheduler directly in this background service isolate
-  trackingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+  trackingTimer =Timer.periodic(const Duration(seconds: 30), (_) {
     runTrackingTick();
   });
 

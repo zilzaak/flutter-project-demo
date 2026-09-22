@@ -209,7 +209,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     });
 
     try {
-      final EmployeeModel? cachedEmployee = await cachedEmployeeChecker.checkCachedEmployee();
+      EmployeeModel? cachedEmployee = await cachedEmployeeChecker.checkCachedEmployee();
       if (!mounted) return;
       // ============================================================
       // CACHED TOKEN EXISTS + EMPLOYEE FETCH SUCCESSFUL

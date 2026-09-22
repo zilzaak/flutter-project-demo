@@ -63,11 +63,27 @@ class EmployeeApiService {
         final Map<String, dynamic> responseBody = jsonDecode(response.body);
         final dynamic data = responseBody['data'];
         final Map<String, dynamic> employeeData = (data is Map<String, dynamic>) ? Map<String, dynamic>.from(data) : responseBody;
-
         employeeData['employeeId'] = employeeData['employeeId'] ?? employeeData['employee_id'] ?? employeeId;
         employeeData['token'] = accessToken;
-        employee = EmployeeModel.fromJson(employeeData);
-        return employee!;
+        EmployeeModel employee = EmployeeModel.fromJson(employeeData);
+
+          EmployeeModel employeeWithToken = EmployeeModel(
+          userId: employee.userId,
+          name: employee.name,
+          designation: employee.designation,
+          department: employee.department,
+          joiningDate: employee.joiningDate,
+          startTime: employee.startTime,
+          endTime: employee.endTime,
+           token: accessToken,
+          firstPunch: employee.firstPunch,
+          weekend: employee.weekend,
+          holiday: employee.holiday,
+
+        );
+
+        return employeeWithToken;
+
       } else {
         throw Exception('Failed to fetch employee info: ${response.statusCode} - ${response.body}');
       }

@@ -49,13 +49,11 @@ class AuthService {
         debugPrint('Email      : ${claims['email'] ?? ''}');
       }
 
-      this.employee= await employeeApiService.fetchEmployeeInfo(
+      final employee= await employeeApiService.fetchEmployeeInfo(
         employeeId: employeeId,
         date: DateTime.now().toIso8601String().split('T').first,
         accessToken: accessToken,
       );
-
-      globals.setAuthData(accessToken, employee!);
 
       if (kDebugMode) {
         debugPrint('==============================================');
@@ -65,8 +63,22 @@ class AuthService {
         debugPrint('Token cached under today key in key store.');
         debugPrint('==============================================');
       }
-
-      return this.employee!;
+        EmployeeModel employeeWithToken = EmployeeModel(
+        userId: employee.userId,
+        name: employee.name,
+        designation: employee.designation,
+        department: employee.department,
+        joiningDate: employee.joiningDate,
+        startTime: employee.startTime,
+        endTime: employee.endTime,
+         token: accessToken,
+         firstPunch: employee.firstPunch,
+         weekend: employee.weekend,
+         holiday: employee.holiday,
+      );
+      this.employee=employeeWithToken;
+      globals.setAuthData(accessToken, employeeWithToken);
+      return employeeWithToken;
     } on FlutterAppAuthUserCancelledException {
       throw Exception('SSO login was cancelled.');
     } on FlutterAppAuthPlatformException catch (e) {

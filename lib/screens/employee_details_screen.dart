@@ -8,6 +8,7 @@ import '../global_config.dart';
 import '../models/employee_model.dart';
 import '../models/location_graph_model.dart';
 import '../services/auth_service.dart';
+import '../services/background_location_service.dart';
 import '../services/location_service.dart';
 import '../services/location_graph_service.dart';
 
@@ -36,8 +37,8 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> with Widg
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _fetchLocationGraph();
-    _startGraphScheduler();
+    //_fetchLocationGraph();
+    //_startGraphScheduler();
     _initializeLocationTracking();
   }
 
@@ -65,12 +66,13 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> with Widg
   /// Start 5-minute periodic scheduler for refreshing the location graph
   void _startGraphScheduler() {
     _graphRefreshTimer?.cancel();
-    _graphRefreshTimer = Timer.periodic(const Duration(minutes: 2), (_) {
+    _graphRefreshTimer = Timer.periodic(const Duration(minutes: 4), (_) {
       _fetchLocationGraph(isBackground: true);
     });
   }
 
   void _initializeLocationTracking() {
+    EmployeeModel employeeWithToken;
     EmployeeModel? emp = widget.employee;
     emp ??= authService.employee;
     EmployeeModel? emp2;
@@ -83,13 +85,29 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> with Widg
     } else {
       emp2 = emp;
     }
-    // Automatically refresh UI coordinates whenever LocationService performs a sync
-    locationService.onLocationSynced = () {
-      if (mounted) {
-        setState(() {});
-      }
-    };
-    locationService.startScheduledSync(emp2);
+
+    if(emp2!=null){
+      employeeWithToken = EmployeeModel(
+        userId: emp2.userId,
+        name: emp2.name,
+        designation: emp2.designation,
+        department: emp2.department,
+        joiningDate: emp2.joiningDate,
+        startTime: emp2.startTime,
+        endTime: emp2.endTime,
+        token: emp2.token,
+        firstPunch: emp2.firstPunch,
+        weekend: emp2.weekend,
+        holiday: emp2.holiday,
+      );
+      // Automatically refresh UI coordinates whenever LocationService performs a sync
+      locationService.onLocationSynced = () {
+        if (mounted) {
+          setState(() {});
+        }
+      };
+      locationService.startScheduledSync(employeeWithToken);
+    }
   }
 
 
@@ -128,7 +146,7 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> with Widg
   }
 
 
-  Future<void> _fetchEmployeeInfo() async {
+/*  Future<void> _fetchEmployeeInfo() async {
     final emp = widget.employee;
     try {
       final data = await employeeApiService.fetchEmployeeInfo(
@@ -144,6 +162,48 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> with Widg
       locationService.startScheduledSync(data);
 
       if (mounted) setState(() {});         // refresh UI
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ _fetchEmployeeInfo ERROR: $e');
+      if (mounted) {
+        _showSnackBar('Refresh failed: $e', Colors.red);
+      }
+    }
+  }*/
+  Future<void> _fetchEmployeeInfo() async {
+    final emp = widget.employee;
+    if (emp == null) return;
+
+    try {
+      final data = await employeeApiService.fetchEmployeeInfo(
+        employeeId:  emp.userId,
+        date:        DateTime.now().toIso8601String().split('T').first,
+        accessToken: emp.token ?? '',
+      );
+      if (kDebugMode) debugPrint('✅ EMPLOYEE INFO RECEIVED');
+      EmployeeModel employeeWithToken = EmployeeModel(
+        userId: data.userId,
+        name: data.name,
+        designation: data.designation,
+        department: data.department,
+        joiningDate: data.joiningDate,
+        startTime: data.startTime,
+        endTime: data.endTime,
+        token: data.token,
+        firstPunch: data.firstPunch,
+        weekend: data.weekend,
+        holiday: data.holiday,
+      );
+
+      // 1. Update main-isolate state
+      globals.currentEmployee = employeeWithToken;
+      globals.setAuthData(data.token ?? '', data);
+      authService.employee = data;
+
+      // 2. Push to background isolate — no stop, no restart
+      await BackgroundLocationService.updateActiveEmployee(data);
+
+      // 3. Refresh UI
+      if (mounted) setState(() {});
     } catch (e) {
       if (kDebugMode) debugPrint('❌ _fetchEmployeeInfo ERROR: $e');
       if (mounted) {
@@ -391,8 +451,22 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> with Widg
                 value: '${emp.startTime} - ${emp.endTime}',
                 color: Colors.teal,
               ),
-              const SizedBox(height: 24),
-
+              const SizedBox(height: 12),
+              _buildDetailTile(
+                icon: Icons.access_time_filled,
+                title: 'Is Holiday',
+                value: '${emp.holiday}',
+                color: Colors.teal,
+              )
+              ,
+              const SizedBox(height: 12),
+              _buildDetailTile(
+                icon: Icons.access_time_filled,
+                title: 'Is Weekend',
+                value: '${emp.weekend}',
+                color: Colors.teal,
+              ),
+              const SizedBox(height: 12),
               // Location Tracking Status & Coordinates
               _buildLocationSection(),
               const SizedBox(height: 24),

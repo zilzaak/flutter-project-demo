@@ -7,24 +7,19 @@ class CommonUtil {
   /// 1. firstPunch (preferred if available and belongs to today, or time-only format)
   /// 2. startTime (fallback if firstPunch is null/empty/from another date)
   /// Smooth continuous duty: exactly 8 hours duration.
+
 /*  bool isOfficeHourFinished(EmployeeModel? model) {
     if (model == null) return false;
-
     final now = DateTime.now();
     DateTime? workStartTime;
-
-    // 1. Prefer firstPunch (full LocalDateTime or time string from backend)
     final fp = model.firstPunch.trim();
     if (fp.isNotEmpty && fp.toLowerCase() != 'null') {
       try {
         final parsed = DateTime.parse(fp);
-        // Only consider valid if firstPunch belongs to today!
-        // If it is from a previous day, disregard it so tracking doesn't prematurely stop.
         if (parsed.year == now.year && parsed.month == now.month && parsed.day == now.day) {
           workStartTime = parsed;
         }
       } catch (_) {
-        // Fallback for time-only string e.g. "08:15:00", "08:15", "8:15 AM"
         workStartTime = _parseTimeOnDate(fp, now);
       }
     }
@@ -52,44 +47,56 @@ class CommonUtil {
     return hours >= 8.0;
   }*/
 
-  /// Returns true  → SKIP the backend API call this tick.
-  /// Returns false → PROCEED with the tracking cycle.
-  ///
-  /// Rule:
-  ///   • firstPunch present today:
-  ///       - skip when (now − firstPunch) > 8h
-  ///       - proceed when (now − firstPunch) <= 8h
-  ///   • firstPunch empty / null (or from a previous day):
-  ///       - skip until now >= startTime
-  ///       - proceed from startTime onwards
   bool isOfficeHourFinished(EmployeeModel? model) {
-    if (model == null) return true;
+    if (model == null) return false;
 
     final now = DateTime.now();
-    final fp  = model.firstPunch.trim();
 
-    // ── Branch 1: firstPunch exists ────────────────────────────────
+    // 1. If firstPunch is available
+    final fp = model.firstPunch.trim();
+
     if (fp.isNotEmpty && fp.toLowerCase() != 'null') {
-      final DateTime? firstPunch = DateTime.tryParse(fp);
+      DateTime? firstPunchTime;
 
-      if (firstPunch != null) {
-        final sameDay = firstPunch.year  == now.year && firstPunch.month == now.month && firstPunch.day   == now.day;
-        if (sameDay) {
-          if (now.isBefore(firstPunch)) return true;   // future punch → skip
-          final hours = now.difference(firstPunch).inMinutes / 60.0;
-          return hours > 8.0;                          // ← strictly greater
-        }else{
-          return true;
-        }
-        // punch is yesterday → treat as no-punch today (fall through)
+      try {
+        firstPunchTime = DateTime.parse(fp);
+      } catch (_) {
+        firstPunchTime = _parseTimeOnDate(fp, now);
       }
-      // malformed punch → fall through
+
+      if (firstPunchTime != null) {
+        final duration = now.difference(firstPunchTime).inMinutes / 60.0;
+
+        // Must be greater than 8 hours
+        return duration > 8.0;
+      }
     }
-    // ── Branch 2: no punch today — compare against startTime ───────
-    final DateTime? scheduled = _parseLocalTime(model.startTime, now);
-    if (scheduled == null) return false;   // unknown → proceed
-    return now.isBefore(scheduled);        // skip until startTime
+
+    // 2. If firstPunch is null, use startTime
+    final st = model.startTime.trim();
+
+    if (st.isEmpty || st.toLowerCase() == 'null') {
+      return false;
+    }
+
+    final rawTime = st.split('-').first.trim();
+    final workStartTime = _parseTimeOnDate(rawTime, now);
+    if (workStartTime == null) {
+      return false;
+    }
+
+    // Current time is before startTime
+    if (now.isBefore(workStartTime)) {
+      return true;
+    }
+
+    // Calculate duration from startTime to current time
+    final duration = now.difference(workStartTime).inMinutes / 60.0;
+
+    // Must be greater than 8 hours
+    return duration > 8.0;
   }
+
 
   DateTime? _parseLocalTime(String raw, DateTime date) {
     final s = raw.trim();
