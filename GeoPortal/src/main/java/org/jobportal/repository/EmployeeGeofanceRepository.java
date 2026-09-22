@@ -73,7 +73,12 @@ public interface EmployeeGeofanceRepository extends JpaRepository<EmployeeGeofan
             " ( select top 1 in_out_datetime from dbo.UM_HR_Employee_Attendance_In_Out where " +
             "  employee_info_id=(select id from UM_HR_Employee_Info where employee_id=:userId ) " +
             "  and cast(in_out_datetime as date)= cast(:today as date) " +
-            "  order by in_out_datetime asc ) as firstPunch  "+
+            "  order by in_out_datetime asc ) as firstPunch  ," +
+            " CASE WHEN dtl.day_of_week IN (6, 7) THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END as weekend ," +
+            " CASE WHEN EXISTS (" +
+            "   SELECT 1 FROM UM_HR_Holiday_Calendar hc " +
+            "   WHERE hc.holiday_date = :today AND hc.active = 1 " +
+            " ) THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END as holiday  " +
             " from UM_HR_Employee_Attendance_Schedule eas " +
             " inner join UM_HR_Employee_Info ei on eas.employee_info_id = ei.id  " +
             " left join UM_HR_Designations dg on ei.designation_id = dg.id  " +
@@ -82,4 +87,5 @@ public interface EmployeeGeofanceRepository extends JpaRepository<EmployeeGeofan
             " inner join UM_HR_Attendance_Template_Detail dtl on st.id = dtl.attendance_schedule_template_id " +
             " where dtl.day_of_week = :dow and ei.employee_id=:userId and eas.active=1  ",nativeQuery = true)
     List<BasicInfoProjection> geBasicInfo(@Param("userId") String userId, @Param("dow") Integer dow,@Param("today") LocalDate today);
+}
 }

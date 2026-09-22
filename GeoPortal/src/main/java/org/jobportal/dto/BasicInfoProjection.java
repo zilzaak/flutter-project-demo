@@ -13,4 +13,6 @@ public interface BasicInfoProjection {
     LocalTime getStartTime();
     LocalDateTime getFirstPunch();
     LocalTime getEndTime();
+    Boolean getHoliday();
+    Boolean getWeekend();
 }

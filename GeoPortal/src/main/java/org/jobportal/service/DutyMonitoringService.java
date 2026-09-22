@@ -131,7 +131,29 @@ public class DutyMonitoringService {
                                     employeeId,
                                     "I");
             boolean status = Integer.valueOf(result.get("out_message_code").toString()) == 0;
-            return ApiDTO.builder().status(status).message((String) result.get("out_message_description")).build();
+
+            // Fetch fresh attendance data (firstPunch, startTime, endTime, holiday, weekend)
+            // so Flutter can check access conditions without a separate API call.
+            Object attendanceData = null;
+            try {
+                LocalDate today = LocalDate.now();
+                List<BasicInfoProjection> infoList = employeeGeofanceRepository.geBasicInfo(
+                        employeeId,
+                        today.getDayOfWeek().getValue(),
+                        today
+                );
+                if (infoList != null && !infoList.isEmpty()) {
+                    attendanceData = infoList.get(0);
+                }
+            } catch (Exception ignored) {
+                // Non-critical: sync result is still returned; Flutter will fall back gracefully
+            }
+
+            return ApiDTO.builder()
+                    .status(status)
+                    .message((String) result.get("out_message_description"))
+                    .data(attendanceData)
+                    .build();
 
         } catch (Exception e) {
             return ApiDTO.builder().status(false).message(e.getMessage()).build();
