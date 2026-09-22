@@ -373,7 +373,7 @@ void onBackgroundServiceStart(ServiceInstance service) async {
       bool syncSuccess = false;
 
       // Batch sync when cache count reaches 5 or multiple of 5 (5*n)
-      if (cacheCount > 0 && cacheCount%4==0) {
+      if (cacheCount > 0 && cacheCount%1==0) {
         if (kDebugMode) {
           print('🚀 [BackgroundIsolate] Syncing batch of $cacheCount locations to backend...');
         }
