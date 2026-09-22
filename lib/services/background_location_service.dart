@@ -242,6 +242,8 @@ void onBackgroundServiceStart(ServiceInstance service) async {
         if (decoded is Map<String, dynamic>) {
           return EmployeeModel.fromJson(decoded);
         }
+      }else{
+        print("loadStoredEmployee returned null employee");
       }
     } catch (_) {}
     return null;
@@ -352,8 +354,15 @@ void onBackgroundServiceStart(ServiceInstance service) async {
 
   // Execute one tracking cycle: GPS retrieval -> buffer caching -> batch HTTP sync
   Future<void> runTrackingTick() async {
+
+    print("runTrackingTick is called at "+DateTime.now().toString());
+
     try {
+
       activeEmployee ??= await loadStoredEmployee();
+      if(activeEmployee==null){
+        print("in runTrackingTick  activeEmployee is null at "+DateTime.now().toString());
+      }
 
       if (kDebugMode) {
         print('🆕 [runTrackingTick] activeEmployee from stored is : '
@@ -362,10 +371,8 @@ void onBackgroundServiceStart(ServiceInstance service) async {
             'firstPunch=${activeEmployee?.firstPunch}');
       }
       await ensureEmployeeForToday();
-     if (activeEmployee != null && (
-          commonUtil.isOfficeHourFinished(activeEmployee) ||
-          activeEmployee?.holiday.toString()=='true' ||
-          activeEmployee?.weekend.toString()=='true' ) ) {
+      final  bool finishedOffishHourOrHoliday = await commonUtil.isOfficeHourFinished(activeEmployee);
+     if (activeEmployee != null && finishedOffishHourOrHoliday) {
         if (kDebugMode) {
           print('⏹️ [BackgroundIsolate] Duty time completed (8 hours). Stopping service.');
         }

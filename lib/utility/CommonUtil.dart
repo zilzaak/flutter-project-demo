@@ -47,54 +47,136 @@ class CommonUtil {
     return hours >= 8.0;
   }*/
 
-  bool isOfficeHourFinished(EmployeeModel? model) {
-    if (model == null) return false;
+  Future<bool> isOfficeHourFinished(EmployeeModel? model) async {
+    print('========== isOfficeHourFinished START ==========');
+
+    if (model == null) {
+      print('model = NULL');
+      print('RESULT = false');
+      print('========== isOfficeHourFinished END ==========');
+      return true;
+    }
+
+    if(model.holiday=='true' || model.weekend=='true'){
+      print('========== weekend or holidaye is true');
+      return true;
+    }
 
     final now = DateTime.now();
+
+    print('Current DateTime = $now');
+    print('Current Date = ${now.toLocal()}');
 
     // 1. If firstPunch is available
     final fp = model.firstPunch.trim();
 
+    print('firstPunch raw = "${model.firstPunch}"');
+    print('firstPunch trimmed = "$fp"');
+
     if (fp.isNotEmpty && fp.toLowerCase() != 'null') {
+      print('firstPunch is NOT null/empty');
+
       DateTime? firstPunchTime;
 
       try {
         firstPunchTime = DateTime.parse(fp);
-      } catch (_) {
+        print('firstPunch parsed using DateTime.parse = $firstPunchTime');
+      } catch (e) {
+        print('DateTime.parse failed = $e');
         firstPunchTime = _parseTimeOnDate(fp, now);
+        print('firstPunch parsed using _parseTimeOnDate = $firstPunchTime');
       }
 
       if (firstPunchTime != null) {
-        final duration = now.difference(firstPunchTime).inMinutes / 60.0;
+        final difference = now.difference(firstPunchTime);
+        final durationMinutes = difference.inMinutes;
+        final durationHours = durationMinutes / 60.0;
 
-        // Must be greater than 8 hours
-        return duration > 8.0;
+        print('--- First Punch Calculation ---');
+        print('firstPunchTime = $firstPunchTime');
+        print('now = $now');
+        print('difference = $difference');
+        print('durationMinutes = $durationMinutes');
+        print('durationHours = $durationHours');
+        print('Required duration = > 8.0 hours');
+
+        final result = durationHours > 8.0;
+
+        print('durationHours > 8.0 = $result');
+        print('RESULT = $result');
+        print('========== isOfficeHourFinished END ==========');
+
+        return result;
+      } else {
+        print('firstPunchTime = NULL');
+        print('Could not determine first punch time.');
+        print('Will fallback to startTime.');
       }
+    } else {
+      print('firstPunch is NULL or EMPTY');
     }
 
     // 2. If firstPunch is null, use startTime
     final st = model.startTime.trim();
 
+    print('startTime raw = "${model.startTime}"');
+    print('startTime trimmed = "$st"');
+
     if (st.isEmpty || st.toLowerCase() == 'null') {
+      print('startTime is NULL or EMPTY');
+      print('RESULT = false');
+      print('========== isOfficeHourFinished END ==========');
       return false;
     }
 
     final rawTime = st.split('-').first.trim();
+
+    print('rawTime extracted from startTime = "$rawTime"');
+
     final workStartTime = _parseTimeOnDate(rawTime, now);
+
+    print('workStartTime parsed = $workStartTime');
+
     if (workStartTime == null) {
+      print('workStartTime = NULL');
+      print('Could not parse startTime.');
+      print('RESULT = false');
+      print('========== isOfficeHourFinished END ==========');
       return false;
     }
 
     // Current time is before startTime
+    print('Current time = $now');
+    print('Work start time = $workStartTime');
+
     if (now.isBefore(workStartTime)) {
+      print('Current time is BEFORE workStartTime');
+      print('RESULT = true');
+      print('========== isOfficeHourFinished END ==========');
       return true;
     }
 
     // Calculate duration from startTime to current time
-    final duration = now.difference(workStartTime).inMinutes / 60.0;
+    final difference = now.difference(workStartTime);
+    final durationMinutes = difference.inMinutes;
+    final durationHours = durationMinutes / 60.0;
+
+    print('--- Start Time Calculation ---');
+    print('workStartTime = $workStartTime');
+    print('now = $now');
+    print('difference = $difference');
+    print('durationMinutes = $durationMinutes');
+    print('durationHours = $durationHours');
+    print('Required duration = > 8.0 hours');
 
     // Must be greater than 8 hours
-    return duration > 8.0;
+    final result = durationHours > 8.0;
+
+    print('durationHours > 8.0 = $result');
+    print('RESULT = $result');
+    print('========== isOfficeHourFinished END ==========');
+
+    return result;
   }
 
 
